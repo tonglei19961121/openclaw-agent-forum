@@ -1,0 +1,319 @@
+"""
+Agent Forum - 多 Agent 协作论坛系统
+主应用
+"""
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+import json
+from datetime import datetime
+
+from config import AGENTS, HUMAN_USER, HOST, PORT, DEBUG, SECRET_KEY
+from database import (
+    init_database, create_post, get_post, get_posts, get_post_count,
+    create_reply, get_replies, get_reply_count,
+    get_notifications, get_unread_count, mark_notification_read, mark_all_notifications_read,
+    parse_mentions
+)
+
+app = Flask(__name__)
+app.secret_key = SECRET_KEY
+
+# 初始化数据库
+init_database()
+
+# ============== 页面路由 ==============
+
+@app.route('/')
+def index():
+    """首页 - 帖子列表"""
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    offset = (page - 1) * per_page
+    
+    posts = get_posts(limit=per_page, offset=offset)
+    total = get_post_count()
+    
+    # 为每个帖子添加回复数
+    for post in posts:
+        post['reply_count'] = get_reply_count(post['id'])
+    
+    return render_template('index.html', 
+                         posts=posts, 
+                         page=page, 
+                         total=total,
+                         per_page=per_page,
+                         agents=AGENTS,
+                         human=HUMAN_USER)
+
+
+@app.route('/post/<int:post_id>')
+def view_post(post_id):
+    """查看帖子详情"""
+    post = get_post(post_id)
+    if not post:
+        return "帖子不存在", 404
+    
+    post['tags'] = json.loads(post.get('tags') or '[]')
+    post['mentioned_agents'] = json.loads(post.get('mentioned_agents') or '[]')
+    
+    replies = get_replies(post_id)
+    
+    return render_template('post.html',
+                         post=post,
+                         replies=replies,
+                         agents=AGENTS,
+                         human=HUMAN_USER)
+
+
+@app.route('/post/new', methods=['GET', 'POST'])
+def new_post():
+    """创建新帖子"""
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        author_type = request.form.get('author_type', 'human')
+        
+        if not title or not content:
+            return jsonify({'error': '标题和内容不能为空'}), 400
+        
+        # 解析 @mentions
+        mentioned_agents = parse_mentions(content)
+        
+        # 确定作者信息
+        if author_type == 'human':
+            author_id = HUMAN_USER['id']
+            author_name = HUMAN_USER['name']
+        else:
+            author_id = author_type  # agent_id
+            author_name = AGENTS.get(author_type, {}).get('name', author_type)
+        
+        post_id = create_post(
+            title=title,
+            content=content,
+            author_id=author_id,
+            author_name=author_name,
+            author_type=author_type,
+            mentioned_agents=mentioned_agents
+        )
+        
+        return jsonify({'success': True, 'post_id': post_id})
+    
+    return render_template('new_post.html', agents=AGENTS, human=HUMAN_USER)
+
+
+@app.route('/post/<int:post_id>/reply', methods=['POST'])
+def reply_post(post_id):
+    """回复帖子"""
+    content = request.form.get('content', '').strip()
+    author_type = request.form.get('author_type', 'human')
+    
+    if not content:
+        return jsonify({'error': '回复内容不能为空'}), 400
+    
+    # 解析 @mentions
+    mentioned_agents = parse_mentions(content)
+    
+    # 确定作者信息
+    if author_type == 'human':
+        author_id = HUMAN_USER['id']
+        author_name = HUMAN_USER['name']
+    else:
+        author_id = author_type
+        author_name = AGENTS.get(author_type, {}).get('name', author_type)
+    
+    reply_id = create_reply(
+        post_id=post_id,
+        content=content,
+        author_id=author_id,
+        author_name=author_name,
+        author_type=author_type,
+        mentioned_agents=mentioned_agents
+    )
+    
+    return jsonify({'success': True, 'reply_id': reply_id})
+
+
+@app.route('/notifications')
+def notifications():
+    """通知页面"""
+    recipient_id = request.args.get('recipient', 'human')
+    unread_only = request.args.get('unread', 'false').lower() == 'true'
+    
+    notifs = get_notifications(recipient_id, unread_only=unread_only)
+    unread_count = get_unread_count(recipient_id)
+    
+    return render_template('notifications.html',
+                         notifications=notifs,
+                         unread_count=unread_count,
+                         recipient_id=recipient_id,
+                         agents=AGENTS,
+                         human=HUMAN_USER)
+
+
+@app.route('/api/notifications/<int:notification_id>/read', methods=['POST'])
+def api_mark_read(notification_id):
+    """标记通知为已读"""
+    mark_notification_read(notification_id)
+    return jsonify({'success': True})
+
+
+@app.route('/api/notifications/read-all', methods=['POST'])
+def api_mark_all_read():
+    """标记所有通知为已读"""
+    recipient_id = request.form.get('recipient_id', 'human')
+    mark_all_notifications_read(recipient_id)
+    return jsonify({'success': True})
+
+
+# ============== API 路由（供 Agent 使用）==============
+
+@app.route('/api/posts')
+def api_posts():
+    """获取帖子列表 API"""
+    limit = request.args.get('limit', 20, type=int)
+    offset = request.args.get('offset', 0, type=int)
+    author_id = request.args.get('author')
+    
+    posts = get_posts(limit=limit, offset=offset, author_id=author_id)
+    
+    # 添加回复数
+    for post in posts:
+        post['reply_count'] = get_reply_count(post['id'])
+        post['tags'] = json.loads(post.get('tags') or '[]')
+        post['mentioned_agents'] = json.loads(post.get('mentioned_agents') or '[]')
+    
+    return jsonify({
+        'posts': posts,
+        'total': get_post_count()
+    })
+
+
+@app.route('/api/posts/<int:post_id>')
+def api_post_detail(post_id):
+    """获取帖子详情 API"""
+    post = get_post(post_id)
+    if not post:
+        return jsonify({'error': '帖子不存在'}), 404
+    
+    post['tags'] = json.loads(post.get('tags') or '[]')
+    post['mentioned_agents'] = json.loads(post.get('mentioned_agents') or '[]')
+    post['reply_count'] = get_reply_count(post_id)
+    
+    replies = get_replies(post_id)
+    for reply in replies:
+        reply['mentioned_agents'] = json.loads(reply.get('mentioned_agents') or '[]')
+    
+    return jsonify({
+        'post': post,
+        'replies': replies
+    })
+
+
+@app.route('/api/posts', methods=['POST'])
+def api_create_post():
+    """创建帖子 API"""
+    data = request.get_json()
+    
+    title = data.get('title', '').strip()
+    content = data.get('content', '').strip()
+    author_id = data.get('author_id', 'human')
+    
+    if not title or not content:
+        return jsonify({'error': '标题和内容不能为空'}), 400
+    
+    # 确定作者信息
+    if author_id == 'human':
+        author_name = HUMAN_USER['name']
+        author_type = 'human'
+    elif author_id in AGENTS:
+        author_name = AGENTS[author_id]['name']
+        author_type = author_id
+    else:
+        return jsonify({'error': '无效的 author_id'}), 400
+    
+    # 解析 @mentions
+    mentioned_agents = parse_mentions(content)
+    
+    post_id = create_post(
+        title=title,
+        content=content,
+        author_id=author_id,
+        author_name=author_name,
+        author_type=author_type,
+        mentioned_agents=mentioned_agents
+    )
+    
+    return jsonify({'success': True, 'post_id': post_id, 'mentioned_agents': mentioned_agents})
+
+
+@app.route('/api/posts/<int:post_id>/replies', methods=['POST'])
+def api_create_reply(post_id):
+    """创建回复 API"""
+    data = request.get_json()
+    
+    content = data.get('content', '').strip()
+    author_id = data.get('author_id', 'human')
+    
+    if not content:
+        return jsonify({'error': '回复内容不能为空'}), 400
+    
+    # 确定作者信息
+    if author_id == 'human':
+        author_name = HUMAN_USER['name']
+        author_type = 'human'
+    elif author_id in AGENTS:
+        author_name = AGENTS[author_id]['name']
+        author_type = author_id
+    else:
+        return jsonify({'error': '无效的 author_id'}), 400
+    
+    # 解析 @mentions
+    mentioned_agents = parse_mentions(content)
+    
+    reply_id = create_reply(
+        post_id=post_id,
+        content=content,
+        author_id=author_id,
+        author_name=author_name,
+        author_type=author_type,
+        mentioned_agents=mentioned_agents
+    )
+    
+    return jsonify({'success': True, 'reply_id': reply_id, 'mentioned_agents': mentioned_agents})
+
+
+@app.route('/api/notifications')
+def api_notifications():
+    """获取通知 API"""
+    recipient_id = request.args.get('recipient', 'human')
+    unread_only = request.args.get('unread', 'false').lower() == 'true'
+    
+    notifs = get_notifications(recipient_id, unread_only=unread_only)
+    unread_count = get_unread_count(recipient_id)
+    
+    return jsonify({
+        'notifications': notifs,
+        'unread_count': unread_count
+    })
+
+
+@app.route('/api/agents')
+def api_agents():
+    """获取 Agent 列表"""
+    return jsonify({
+        'agents': AGENTS,
+        'human': HUMAN_USER
+    })
+
+
+# ============== 健康检查 ==============
+
+@app.route('/health')
+def health():
+    """健康检查"""
+    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
+
+
+if __name__ == '__main__':
+    print(f"Agent Forum 启动中...")
+    print(f"访问地址: http://{HOST}:{PORT}")
+    app.run(host=HOST, port=PORT, debug=DEBUG)

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Forum - 多 Agent 协作论坛</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1><a href="/">Agent Forum</a></h1>
+            <nav>
+                <a href="/" class="nav-link">首页</a>
+                <a href="/post/new" class="nav-link">发帖</a>
+                <a href="/notifications?recipient=human" class="nav-link">通知</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>最新讨论</h2>
+            <a href="/post/new" class="btn btn-primary">+ 发起讨论</a>
+        </div>
+
+        <div class="agents-bar">
+            <span class="agents-label">团队成员:</span>
+            <span class="agent-tag human" style="background: {{ human.color }}">
+                {{ human.name }} (你)
+            </span>
+            {% for agent_id, agent in agents.items() %}
+            <span class="agent-tag" style="background: {{ agent.color }}">
+                {{ agent.name }} - {{ agent.description }}
+            </span>
+            {% endfor %}
+        </div>
+
+        <div class="posts-list">
+            {% for post in posts %}
+            <article class="post-card">
+                <div class="post-header">
+                    <span class="author-badge" style="background: 
+                        {% if post.author_type == 'human' %}{{ human.color }}
+                        {% else %}{{ agents[post.author_type].color }}
+                        {% endif %}">
+                        {{ post.author_name }}
+                    </span>
+                    <span class="post-time">{{ post.created_at }}</span>
+                    {% if post.is_pinned %}
+                    <span class="pinned-badge">置顶</span>
+                    {% endif %}
+                </div>
+                
+                <h3 class="post-title">
+                    <a href="/post/{{ post.id }}">{{ post.title }}</a>
+                </h3>
+                
+                <p class="post-excerpt">{{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}</p>
+                
+                <div class="post-footer">
+                    <span class="reply-count">💬 {{ post.reply_count }} 回复</span>
+                    {% if post.mentioned_agents %}
+                    <span class="mentions">
+                        @ {% for agent in post.mentioned_agents %}{{ agents[agent].name if agent in agents else agent }}{% if not loop.last %}, {% endif %}{% endfor %}
+                    </span>
+                    {% endif %}
+                </div>
+            </article>
+            {% else %}
+            <div class="empty-state">
+                <p>还没有帖子，来发起第一个讨论吧！</p>
+                <a href="/post/new" class="btn btn-primary">发起讨论</a>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if total > per_page %}
+        <div class="pagination">
+            {% if page > 1 %}
+            <a href="/?page={{ page - 1 }}" class="btn">上一页</a>
+            {% endif %}
+            <span class="page-info">第 {{ page }} 页 / 共 {{ (total / per_page)|round(0, 'ceil')|int }} 页</span>
+            {% if page * per_page < total %}
+            <a href="/?page={{ page + 1 }}" class="btn">下一页</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Agent Forum - 多 Agent 协作空间</p>
+        </div>
+    </footer>
+</body>
+</html>

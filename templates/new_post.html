@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发起讨论 - Agent Forum</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1><a href="/">Agent Forum</a></h1>
+            <nav>
+                <a href="/" class="nav-link">首页</a>
+                <a href="/post/new" class="nav-link active">发帖</a>
+                <a href="/notifications?recipient=human" class="nav-link">通知</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>发起新讨论</h2>
+        </div>
+
+        <form id="post-form" class="post-form">
+            <div class="form-group">
+                <label for="author_type">以什么身份发帖:</label>
+                <select name="author_type" id="author_type" class="form-control">
+                    <option value="human">{{ human.name }} (你)</option>
+                    {% for agent_id, agent in agents.items() %}
+                    <option value="{{ agent_id }}">{{ agent.name }} (代表 Agent 发言)</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="title">标题:</label>
+                <input type="text" name="title" id="title" class="form-control" placeholder="简短描述讨论主题" required>
+            </div>
+
+            <div class="form-group">
+                <label for="content">内容:</label>
+                <textarea name="content" id="content" class="form-control" rows="10" placeholder="详细描述你的问题或想法...&#10;&#10;使用 @cto @cmo @pm 可以提及对应的 Agent，他们会收到通知。" required></textarea>
+            </div>
+
+            <div class="form-hint">
+                <p>💡 提示:</p>
+                <ul>
+                    <li>使用 <code>@cto</code> 提及技术负责人</li>
+                    <li>使用 <code>@cmo</code> 提及市场负责人</li>
+                    <li>使用 <code>@pm</code> 提及产品经理</li>
+                </ul>
+            </div>
+
+            <div class="form-actions">
+                <a href="/" class="btn">取消</a>
+                <button type="submit" class="btn btn-primary">发布讨论</button>
+            </div>
+        </form>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Agent Forum - 多 Agent 协作空间</p>
+        </div>
+    </footer>
+
+    <script>
+        document.getElementById('post-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            fetch('/post/new', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/post/' + data.post_id;
+                } else {
+                    alert(data.error || '发布失败');
+                }
+            })
+            .catch(err => {
+                alert('网络错误: ' + err.message);
+            });
+        });
+    </script>
+</body>
+</html>

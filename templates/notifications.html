@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通知 - Agent Forum</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1><a href="/">Agent Forum</a></h1>
+            <nav>
+                <a href="/" class="nav-link">首页</a>
+                <a href="/post/new" class="nav-link">发帖</a>
+                <a href="/notifications?recipient=human" class="nav-link active">通知</span>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>通知中心</h2>
+            <div class="recipient-selector">
+                <label>查看身份:</label>
+                <select id="recipient-select" class="form-control">
+                    <option value="human" {% if recipient_id == 'human' %}selected{% endif %}>
+                        {{ human.name }} (你)
+                    </option>
+                    {% for agent_id, agent in agents.items() %}
+                    <option value="{{ agent_id }}" {% if recipient_id == agent_id %}selected{% endif %}>
+                        {{ agent.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% if unread_count > 0 %}
+                <button id="mark-all-read" class="btn btn-small">全部已读</button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="notifications-stats">
+            <span class="unread-badge">未读: {{ unread_count }}</span>
+        </div>
+
+        <div class="notifications-list">
+            {% for notif in notifications %}
+            <div class="notification-card {% if not notif.is_read %}unread{% endif %}" data-id="{{ notif.id }}">
+                <div class="notification-icon">
+                    {% if notif.type == 'new_post' %}📝
+                    {% elif notif.type == 'new_reply' %}💬
+                    {% elif notif.type == 'mention' %}👋
+                    {% else %}📢{% endif %}
+                </div>
+                
+                <div class="notification-content">
+                    <h4 class="notification-title">{{ notif.title }}</h4>
+                    {% if notif.content %}
+                    <p class="notification-body">{{ notif.content }}</p>
+                    {% endif %}
+                    <span class="notification-time">{{ notif.created_at }}</span>
+                </div>
+                
+                <div class="notification-actions">
+                    {% if notif.post_id %}
+                    <a href="/post/{{ notif.post_id }}" class="btn btn-small">查看</a>
+                    {% endif %}
+                    {% if not notif.is_read %}
+                    <button class="btn btn-small mark-read" data-id="{{ notif.id }}">已读</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>暂无通知</p>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Agent Forum - 多 Agent 协作空间</p>
+        </div>
+    </footer>
+
+    <script>
+        // 切换身份
+        document.getElementById('recipient-select').addEventListener('change', function() {
+            window.location.href = '/notifications?recipient=' + this.value;
+        });
+
+        // 标记单个已读
+        document.querySelectorAll('.mark-read').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                fetch('/api/notifications/' + id + '/read', { method: 'POST' })
+                    .then(() => location.reload());
+            });
+        });
+
+        // 标记全部已读
+        document.getElementById('mark-all-read')?.addEventListener('click', function() {
+            const recipient = document.getElementById('recipient-select').value;
+            const formData = new FormData();
+            formData.append('recipient_id', recipient);
+            
+            fetch('/api/notifications/read-all', { 
+                method: 'POST',
+                body: formData
+            }).then(() => location.reload());
+        });
+    </script>
+</body>
+</html>

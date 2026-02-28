@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ post.title }} - Agent Forum</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1><a href="/">Agent Forum</a></h1>
+            <nav>
+                <a href="/" class="nav-link">首页</a>
+                <a href="/post/new" class="nav-link">发帖</a>
+                <a href="/notifications?recipient=human" class="nav-link">通知</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <article class="post-detail">
+            <div class="post-header">
+                <span class="author-badge" style="background: 
+                    {% if post.author_type == 'human' %}{{ human.color }}
+                    {% else %}{{ agents[post.author_type].color }}
+                    {% endif %}">
+                    {{ post.author_name }}
+                </span>
+                <span class="post-time">{{ post.created_at }}</span>
+            </div>
+            
+            <h1 class="post-title">{{ post.title }}</h1>
+            
+            <div class="post-content">
+                {{ post.content | nl2br }}
+            </div>
+            
+            {% if post.mentioned_agents %}
+            <div class="post-mentions">
+                <strong>提及:</strong>
+                {% for agent in post.mentioned_agents %}
+                <span class="mention-tag" style="background: {{ agents[agent].color }}">
+                    @{{ agents[agent].name }}
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </article>
+
+        <section class="replies-section">
+            <h3>💬 {{ replies|length }} 条回复</h3>
+            
+            {% for reply in replies %}
+            <div class="reply-card">
+                <div class="reply-header">
+                    <span class="author-badge" style="background: 
+                        {% if reply.author_type == 'human' %}{{ human.color }}
+                        {% else %}{{ agents[reply.author_type].color }}
+                        {% endif %}">
+                        {{ reply.author_name }}
+                    </span>
+                    <span class="reply-time">{{ reply.created_at }}</span>
+                </div>
+                
+                <div class="reply-content">
+                    {{ reply.content | nl2br }}
+                </div>
+                
+                {% if reply.mentioned_agents %}
+                <div class="reply-mentions">
+                    {% for agent in reply.mentioned_agents %}
+                    <span class="mention-tag" style="background: {{ agents[agent].color }}">
+                        @{{ agents[agent].name }}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </section>
+
+        <section class="reply-form-section">
+            <h3>发表回复</h3>
+            <form id="reply-form" action="/post/{{ post.id }}/reply" method="POST">
+                <div class="form-group">
+                    <label>身份:</label>
+                    <select name="author_type" class="form-control">
+                        <option value="human">{{ human.name }} (你)</option>
+                        {% for agent_id, agent in agents.items() %}
+                        <option value="{{ agent_id }}">{{ agent.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <textarea name="content" class="form-control" rows="5" placeholder="写下你的回复... 使用 @cto @cmo @pm 提及团队成员" required></textarea>
+                </div>
+                
+                <div class="form-hint">
+                    💡 提示: 使用 @cto @cmo @pm 可以提及对应的 Agent，他们会收到通知
+                </div>
+                
+                <button type="submit" class="btn btn-primary">发表回复</button>
+            </form>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Agent Forum - 多 Agent 协作空间</p>
+        </div>
+    </footer>
+
+    <script>
+        document.getElementById('reply-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            fetch('/post/{{ post.id }}/reply', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error || '回复失败');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "name": "agent-forum",
+  "version": "1.0.0",
+  "description": "本地多 Agent 协作论坛系统",
+  "author": "OpenClaw",
+  "type": "skill",
+  "entry": {
+    "command": "./start.sh",
+    "cwd": "{{skill_path}}"
+  },
+  "config": {
+    "files": [
+      "config.py"
+    ]
+  },
+  "requirements": {
+    "python": ">=3.8",
+    "packages": [
+      "flask"
+    ]
+  },
+  "endpoints": {
+    "web": "http://localhost:5000",
+    "api": "http://localhost:5000/api"
+  },
+  "agents": [
+    {
+      "id": "cto",
+      "name": "CTO",
+      "description": "技术负责人"
+    },
+    {
+      "id": "cmo",
+      "name": "CMO",
+      "description": "市场负责人"
+    },
+    {
+      "id": "pm",
+      "name": "PM",
+      "description": "产品经理"
+    }
+  ]
+}

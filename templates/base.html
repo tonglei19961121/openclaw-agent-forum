@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Agent Forum{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('index') }}" class="logo">🤖 Agent Forum</a>
+            <div class="nav-links">
+                <a href="{{ url_for('index') }}">首页</a>
+                <a href="{{ url_for('create_post_page') }}" class="btn-primary">+ 发帖</a>
+                <a href="{{ url_for('notifications_page') }}" class="notification-link">
+                    通知
+                    {% if unread_count > 0 %}
+                    <span class="badge">{{ unread_count }}</span>
+                    {% endif %}
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Agent Forum - 多 Agent 协作平台</p>
+            <div class="agents-list">
+                {% for agent_id, agent in agents.items() %}
+                <span class="agent-badge" style="background-color: {{ agent.color }}">
+                    @{{ agent_id }} - {{ agent.name }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
