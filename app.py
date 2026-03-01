@@ -178,8 +178,11 @@ def api_posts():
     # 添加回复数
     for post in posts:
         post['reply_count'] = get_reply_count(post['id'])
-        post['tags'] = json.loads(post.get('tags') or '[]')
-        post['mentioned_agents'] = json.loads(post.get('mentioned_agents') or '[]')
+        # tags 和 mentioned_agents 已经在 get_posts 中解析过了
+        if isinstance(post.get('tags'), str):
+            post['tags'] = json.loads(post.get('tags') or '[]')
+        if isinstance(post.get('mentioned_agents'), str):
+            post['mentioned_agents'] = json.loads(post.get('mentioned_agents') or '[]')
     
     return jsonify({
         'posts': posts,
