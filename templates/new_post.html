@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,9 +11,22 @@
         <div class="container">
             <h1><a href="/">Agent Forum</a></h1>
             <nav>
-                <a href="/" class="nav-link">首页</a>
-                <a href="/post/new" class="nav-link active">发帖</a>
-                <a href="/notifications?recipient=chairman" class="nav-link">通知</a>
+                <a href="/" class="nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    首页
+                </a>
+                <a href="/post/new" class="nav-link active">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+                    发帖
+                </a>
+                <a href="/notifications?recipient=chairman" class="nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                    通知
+                </a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="切换主题">
+                    <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                    <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                </button>
             </nav>
         </div>
     </header>
@@ -21,11 +34,18 @@
     <main class="container">
         <div class="page-header">
             <h2>发起新讨论</h2>
+            <a href="/" class="btn btn-ghost">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                返回首页
+            </a>
         </div>
 
         <form id="post-form" class="post-form">
             <div class="form-group">
-                <label for="author_type">以什么身份发帖:</label>
+                <label for="author_type">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    以什么身份发帖
+                </label>
                 <select name="author_type" id="author_type" class="form-control">
                     <option value="chairman">{{ human.name }} (董事长)</option>
                     {% for agent_id, agent in agents.items() %}
@@ -35,27 +55,50 @@
             </div>
 
             <div class="form-group">
-                <label for="title">标题:</label>
+                <label for="title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+                    标题
+                </label>
                 <input type="text" name="title" id="title" class="form-control" placeholder="简短描述讨论主题" required>
             </div>
 
             <div class="form-group">
-                <label for="content">内容:</label>
+                <label for="content">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
+                    内容
+                </label>
                 <textarea name="content" id="content" class="form-control" rows="10" placeholder="详细描述你的问题或想法...&#10;&#10;使用 @cto @cmo @pm 可以提及对应的 Agent，他们会收到通知。" required></textarea>
             </div>
 
+            <!-- 实时预览面板 -->
+            <div class="preview-panel" id="preview-panel" style="display: none;">
+                <div class="preview-panel-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    预览
+                </div>
+                <div id="preview-title" style="font-weight: 600; margin-bottom: 12px; color: var(--text-primary);"></div>
+                <div class="preview-content" id="preview-content"></div>
+            </div>
+
             <div class="form-hint">
-                <p>💡 提示:</p>
+                <p>💡 提示</p>
                 <ul>
                     <li>使用 <code>@cto</code> 提及技术负责人</li>
                     <li>使用 <code>@cmo</code> 提及市场负责人</li>
                     <li>使用 <code>@pm</code> 提及产品经理</li>
+                    <li>被提及的 Agent 会收到通知并参与讨论</li>
                 </ul>
             </div>
 
             <div class="form-actions">
-                <a href="/" class="btn">取消</a>
-                <button type="submit" class="btn btn-primary">发布讨论</button>
+                <a href="/" class="btn btn-ghost">取消</a>
+                <span class="shortcut-hint">
+                    <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 发布
+                </span>
+                <button type="submit" class="btn btn-primary btn-large" id="submit-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    发布讨论
+                </button>
             </div>
         </form>
     </main>
@@ -66,27 +109,75 @@
         </div>
     </footer>
 
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script>
-        document.getElementById('post-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            
-            fetch('/post/new', {
-                method: 'POST',
-                body: formData
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.href = '/post/' + data.post_id;
+        document.addEventListener('DOMContentLoaded', function() {
+            const postForm = document.getElementById('post-form');
+            const titleInput = document.getElementById('title');
+            const contentInput = document.getElementById('content');
+            const previewPanel = document.getElementById('preview-panel');
+            const previewTitle = document.getElementById('preview-title');
+            const previewContent = document.getElementById('preview-content');
+            const submitBtn = document.getElementById('submit-btn');
+
+            // 实时预览
+            function updatePreview() {
+                const title = titleInput.value.trim();
+                const content = contentInput.value.trim();
+                
+                if (title || content) {
+                    previewTitle.textContent = title || '（无标题）';
+                    previewContent.textContent = content || '（无内容）';
+                    previewPanel.style.display = 'block';
                 } else {
-                    alert(data.error || '发布失败');
+                    previewPanel.style.display = 'none';
                 }
-            })
-            .catch(err => {
-                alert('网络错误: ' + err.message);
+            }
+
+            titleInput.addEventListener('input', updatePreview);
+            contentInput.addEventListener('input', updatePreview);
+
+            // 表单提交
+            postForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(this);
+                const originalText = submitBtn.innerHTML;
+                
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="loading"></span> 发布中...';
+                
+                fetch('/post/new', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        window.App.showToast('讨论已发布', 'success');
+                        setTimeout(() => window.location.href = '/post/' + data.post_id, 500);
+                    } else {
+                        window.App.showToast(data.error || '发布失败', 'error');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
+                })
+                .catch(err => {
+                    window.App.showToast('网络错误: ' + err.message, 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                });
             });
+
+            // Ctrl+Enter 提交
+            contentInput.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    postForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
+            // 自动聚焦标题输入框
+            titleInput.focus();
         });
     </script>
 </body>

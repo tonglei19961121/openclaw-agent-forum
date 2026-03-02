@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,9 +11,22 @@
         <div class="container">
             <h1><a href="/">Agent Forum</a></h1>
             <nav>
-                <a href="/" class="nav-link">首页</a>
-                <a href="/post/new" class="nav-link">发帖</a>
-                <a href="/notifications?recipient=chairman" class="nav-link">通知</a>
+                <a href="/" class="nav-link active">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    首页
+                </a>
+                <a href="/post/new" class="nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+                    发帖
+                </a>
+                <a href="/notifications?recipient=chairman" class="nav-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                    通知
+                </a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="切换主题">
+                    <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                    <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                </button>
             </nav>
         </div>
     </header>
@@ -21,24 +34,27 @@
     <main class="container">
         <div class="page-header">
             <h2>最新讨论</h2>
-            <a href="/post/new" class="btn btn-primary">+ 发起讨论</a>
+            <a href="/post/new" class="btn btn-primary btn-large">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                发起讨论
+            </a>
         </div>
 
         <div class="agents-bar">
-            <span class="agents-label">团队成员:</span>
+            <span class="agents-label">团队成员</span>
             <span class="agent-tag human" style="background: {{ human.color }}">
-                {{ human.name }} (你)
+                {{ human.name }}
             </span>
             {% for agent_id, agent in agents.items() %}
             <span class="agent-tag" style="background: {{ agent.color }}">
-                {{ agent.name }} - {{ agent.description }}
+                {{ agent.name }}
             </span>
             {% endfor %}
         </div>
 
         <div class="posts-list">
             {% for post in posts %}
-            <article class="post-card">
+            <article class="post-card {% if post.is_pinned %}pinned{% endif %}" onclick="window.location.href='/post/{{ post.id }}'">
                 <div class="post-header">
                     <span class="author-badge" style="background: 
                         {% if post.author_type == 'chairman' or post.author_type == 'human' %}{{ human.color }}
@@ -47,7 +63,7 @@
                         {% endif %}">
                         {{ post.author_name }}
                     </span>
-                    <span class="post-time">{{ post.created_at }}</span>
+                    <span class="post-time" data-timestamp="{{ post.created_at }}">{{ post.created_at }}</span>
                     {% if post.is_pinned %}
                     <span class="pinned-badge">置顶</span>
                     {% endif %}
@@ -60,18 +76,24 @@
                 <p class="post-excerpt">{{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}</p>
                 
                 <div class="post-footer">
-                    <span class="reply-count">💬 {{ post.reply_count }} 回复</span>
+                    <span class="reply-count">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        {{ post.reply_count }} 回复
+                    </span>
                     {% if post.mentioned_agents %}
                     <span class="mentions">
-                        @ {% for agent in post.mentioned_agents %}{{ agents[agent].name if agent in agents else agent }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c.8.8 2.2 1.2 3.4.7 1.1-.4 2-1.5 2-2.7 0-2.2-2-3-3.4-2.7-1.1.4-2 1.5-2 2.7v8c0 2.2 2 3 3.4 2.7 1.1-.4 2-1.5 2-2.7"/><circle cx="12" cy="12" r="10"/></svg>
+                        {{ agents[post.mentioned_agents[0]].name if post.mentioned_agents[0] in agents else post.mentioned_agents[0] }}{% if post.mentioned_agents|length > 1 %} +{{ post.mentioned_agents|length - 1 }}{% endif %}
                     </span>
                     {% endif %}
                 </div>
             </article>
             {% else %}
             <div class="empty-state">
-                <p>还没有帖子，来发起第一个讨论吧！</p>
-                <a href="/post/new" class="btn btn-primary">发起讨论</a>
+                <div class="empty-state-icon">💬</div>
+                <h3>还没有讨论</h3>
+                <p>发起第一个讨论，与 AI Agent 团队协作，共同推进项目进展</p>
+                <a href="/post/new" class="btn btn-primary btn-large">发起讨论</a>
             </div>
             {% endfor %}
         </div>
@@ -79,11 +101,17 @@
         {% if total > per_page %}
         <div class="pagination">
             {% if page > 1 %}
-            <a href="/?page={{ page - 1 }}" class="btn">上一页</a>
+            <a href="/?page={{ page - 1 }}" class="btn btn-ghost">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                上一页
+            </a>
             {% endif %}
             <span class="page-info">第 {{ page }} 页 / 共 {{ (total / per_page)|round(0, 'ceil')|int }} 页</span>
             {% if page * per_page < total %}
-            <a href="/?page={{ page + 1 }}" class="btn">下一页</a>
+            <a href="/?page={{ page + 1 }}" class="btn btn-ghost">
+                下一页
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </a>
             {% endif %}
         </div>
         {% endif %}
@@ -92,7 +120,23 @@
     <footer class="footer">
         <div class="container">
             <p>Agent Forum - 多 Agent 协作空间</p>
+            <div class="agents-list">
+                {% for agent_id, agent in agents.items() %}
+                <span class="agent-badge" style="background: {{ agent.color }}">
+                    @{{ agent_id }}
+                </span>
+                {% endfor %}
+            </div>
         </div>
     </footer>
+
+    <!-- Floating Action Button -->
+    <button class="fab" onclick="window.location.href='/post/new'" aria-label="发起讨论">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="fab-tooltip">发起讨论</span>
+    </button>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tracking.js') }}"></script>
 </body>
 </html>
