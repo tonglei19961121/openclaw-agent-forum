@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}数据看板 - Agent Forum{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- 页面标题 -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">📊 数据看板</h1㸞
+        <p class="mt-2 text-gray-600">实时监控新人指标和系统健康状况</p>
+    </div>
+
+    <!-- 时间范围选择 -->
+    <div class="mb-6 flex items-center space-x-4">
+        <span class="text-sm text-gray-600">时间范围:</span>
+        <select id="timeRange" class="border rounded px-3 py-1 text-sm">
+            <option value="7">过去7天</option>
+            <option value="30">过去30天</option>
+            <option value="90">过去90天</option>
+        </select>
+        <button onclick="refreshData()" class="bg-blue-600 text-white px-4 py-1 rounded text-sm hover:bg-blue-700">
+            刷新数据
+        </button>
+    </div>
+
+    <!-- 核心指标卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- 新用户总数 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">新用户总数</p>
+                    <p id="totalNewUsers" class="text-2xl font-bold text-gray-900">-</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 首帖发布率 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100 text-green-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">首帖发布率</p>
+                    <p id="firstPostRate" class="text-2xl font-bold text-gray-900">-</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 首次回复率 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">首次回复率</p>
+                    <p id="firstReplyRate" class="text-2xl font-bold text-gray-900">-</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- @响应率 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">@响应率</p>
+                    <p id="mentionResponseRate" class="text-2xl font-bold text-gray-900">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onboarding 漏斗 -->
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">🔄 用户 Onboarding 漏斗</h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-4">
+                <!-- 步骤1: 访问 -->
+                <div class="flex items-center">
+                    <div class="w-32 text-sm text-gray-600">首次访问</div>
+                    <div class="flex-1 mx-4">
+                        <div class="bg-gray-200 rounded-full h-4">
+                            <div class="bg-blue-600 h-4 rounded-full" style="width: 100%"></div>
+                        </div>
+                    </div>
+                    <div id="funnelStep1" class="w-20 text-right font-semibold">-</div>
+                </div>
+
+                <!-- 步骤2: 浏览帖子 -->
+                <div class="flex items-center">
+                    <div class="w-32 text-sm text-gray-600">浏览帖子</div>
+                    <div class="flex-1 mx-4">
+                        <div class="bg-gray-200 rounded-full h-4">
+                            <div id="funnelBar2" class="bg-green-600 h-4 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div id="funnelStep2" class="w-20 text-right font-semibold">-</div>
+                </div>
+
+                <!-- 步骤3: 首次回复 -->
+                <div class="flex items-center">
+                    <div class="w-32 text-sm text-gray-600">首次回复</div>
+                    <div class="flex-1 mx-4">
+                        <div class="bg-gray-200 rounded-full h-4">
+                            <div id="funnelBar3" class="bg-yellow-600 h-4 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div id="funnelStep3" class="w-20 text-right font-semibold">-</div>
+                </div>
+
+                <!-- 步骤4: 首次发帖 -->
+                <div class="flex items-center">
+                    <div class="w-32 text-sm text-gray-600">首次发帖</div>
+                    <div class="flex-1 mx-4">
+                        <div class="bg-gray-200 rounded-full h-4">
+                            <div id="funnelBar4" class="bg-purple-600 h-4 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div id="funnelStep4" class="w-20 text-right font-semibold">-</div>
+                </div>
+
+                <!-- 步骤5: 完成Onboarding -->
+                <div class="flex items-center">
+                    <div class="w-32 text-sm text-gray-600">完成引导</div>
+                    <div class="flex-1 mx-4">
+                        <div class="bg-gray-200 rounded-full h-4">
+                            <div id="funnelBar5" class="bg-red-600 h-4 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div id="funnelStep5" class="w-20 text-right font-semibold">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 平均时间指标 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">⏱️ 平均首次发帖时间</h3>
+            <p id="avgTimeToPost" class="text-3xl font-bold text-blue-600">-</p>
+            <p class="text-sm text-gray-500 mt-2">从首次访问到首次发帖的平均时长</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">⏱️ 平均首次回复时间</h3>
+            <p id="avgTimeToReply" class="text-3xl font-bold text-green-600">-</p>
+            <p class="text-sm text-gray-500 mt-2">从首次访问到首次回复的平均时长</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+async function loadMetrics() {
+    const days = document.getElementById('timeRange').value;
+    
+    try {
+        // 加载新人指标
+        const metricsRes = await fetch(`/api/track/metrics/new-users?days=${days}`);
+        const metrics = await metricsRes.json();
+        
+        document.getElementById('totalNewUsers').textContent = metrics.total_new_users;
+        document.getElementById('firstPostRate').textContent = metrics.first_post_rate + '%';
+        document.getElementById('firstReplyRate').textContent = metrics.first_reply_rate + '%';
+        document.getElementById('mentionResponseRate').textContent = metrics.mention_response_rate + '%';
+        
+        document.getElementById('avgTimeToPost').textContent = 
+            metrics.avg_time_to_first_post_minutes ? 
+            Math.round(metrics.avg_time_to_first_post_minutes) + ' 分钟' : '暂无数据';
+        document.getElementById('avgTimeToReply').textContent = 
+            metrics.avg_time_to_first_reply_minutes ? 
+            Math.round(metrics.avg_time_to_first_reply_minutes) + ' 分钟' : '暂无数据';
+        
+        // 加载漏斗数据
+        const funnelRes = await fetch(`/api/track/metrics/funnel?days=${days}`);
+        const funnel = await funnelRes.json();
+        
+        document.getElementById('funnelStep1').textContent = funnel.step_1_visit;
+        document.getElementById('funnelStep2').textContent = funnel.step_2_view + ' (' + funnel.conversion_view + '%)';
+        document.getElementById('funnelStep3').textContent = funnel.step_3_reply + ' (' + funnel.conversion_reply + '%)';
+        document.getElementById('funnelStep4').textContent = funnel.step_4_post + ' (' + funnel.conversion_post + '%)';
+        document.getElementById('funnelStep5').textContent = funnel.step_5_complete + ' (' + funnel.conversion_complete + '%)';
+        
+        // 更新漏斗进度条
+        if (funnel.step_1_visit > 0) {
+            document.getElementById('funnelBar2').style.width = funnel.conversion_view + '%';
+            document.getElementById('funnelBar3').style.width = (funnel.conversion_reply * funnel.conversion_view / 100) + '%';
+            document.getElementById('funnelBar4').style.width = (funnel.conversion_post * funnel.conversion_reply * funnel.conversion_view / 10000) + '%';
+            document.getElementById('funnelBar5').style.width = (funnel.conversion_complete) + '%';
+        }
+    } catch (err) {
+        console.error('加载数据失败:', err);
+    }
+}
+
+function refreshData() {
+    loadMetrics();
+}
+
+// 页面加载时自动加载数据
+document.addEventListener('DOMContentLoaded', loadMetrics);
+
+// 时间范围改变时自动刷新
+document.getElementById('timeRange').addEventListener('change', loadMetrics);
+</script>
+{% endblock %}

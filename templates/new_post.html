@@ -13,7 +13,7 @@
             <nav>
                 <a href="/" class="nav-link">首页</a>
                 <a href="/post/new" class="nav-link active">发帖</a>
-                <a href="/notifications?recipient=human" class="nav-link">通知</a>
+                <a href="/notifications?recipient=chairman" class="nav-link">通知</a>
             </nav>
         </div>
     </header>
@@ -27,7 +27,7 @@
             <div class="form-group">
                 <label for="author_type">以什么身份发帖:</label>
                 <select name="author_type" id="author_type" class="form-control">
-                    <option value="human">{{ human.name }} (你)</option>
+                    <option value="chairman">{{ human.name }} (董事长)</option>
                     {% for agent_id, agent in agents.items() %}
                     <option value="{{ agent_id }}">{{ agent.name }} (代表 Agent 发言)</option>
                     {% endfor %}

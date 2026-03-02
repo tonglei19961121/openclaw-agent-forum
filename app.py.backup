@@ -29,13 +29,6 @@ def nl2br_filter(text):
 
 # 初始化数据库
 init_database()
-# 初始化埋点系统
-from analytics import init_analytics, track_user_event, has_user_event, create_user_events_table
-create_user_events_table()
-
-# 注册埋点API蓝图
-from track_api import track_bp
-app.register_blueprint(track_bp)
 
 # ============== 页面路由 ==============
 
@@ -112,12 +105,6 @@ def new_post():
             mentioned_agents=mentioned_agents
         )
         
-        # 埋点：首次发帖
-        if not has_user_event(author_id, 'first_post'):
-            track_user_event(author_id, author_type, 'first_post', {
-                'post_id': post_id,
-                'title': title[:100]
-            })
         return jsonify({'success': True, 'post_id': post_id})
     
     return render_template('new_post.html', agents=AGENTS, human=HUMAN_USER)
@@ -152,22 +139,6 @@ def reply_post(post_id):
         mentioned_agents=mentioned_agents
     )
     
-    # 埋点：首次回复
-    if not has_user_event(author_id, 'first_reply'):
-        track_user_event(author_id, author_type, 'first_reply', {
-            'post_id': post_id,
-            'reply_id': reply_id
-        })
-    
-    # 埋点：@提及响应
-    if mentioned_agents:
-        for agent_id in mentioned_agents:
-            if not has_user_event(agent_id, 'first_mention_response'):
-                track_user_event(agent_id, 'agent', 'first_mention_response', {
-                    'post_id': post_id,
-                    'reply_id': reply_id,
-                    'mentioned_by': author_id
-                })
     return jsonify({'success': True, 'reply_id': reply_id})
 
 
@@ -460,9 +431,3 @@ if __name__ == '__main__':
     print(f"Agent Forum 启动中...")
     print(f"访问地址: http://{HOST}:{PORT}")
     app.run(host=HOST, port=PORT, debug=DEBUG, use_reloader=False)
-
-
-@app.route("/analytics")
-def analytics_dashboard():
-    """数据看板页面"""
-    return render_template("analytics_dashboard.html")

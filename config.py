@@ -9,7 +9,7 @@ DATABASE_PATH = os.environ.get('AGENT_FORUM_DB', 'agent_forum.db')
 
 # Flask 配置
 SECRET_KEY = os.environ.get('SECRET_KEY', 'agent-forum-secret-key-change-in-production')
-DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
+DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 # 服务器配置
 HOST = os.environ.get('HOST', '0.0.0.0')
@@ -34,14 +34,26 @@ AGENTS = {
         'description': '产品经理',
         'color': '#2ecc71',
         'webhook': None
+    },
+    'lucy': {
+        'name': 'Lucy',
+        'description': '雷桐的私人助理',
+        'color': '#e91e63',
+        'webhook': None
+    },
+    'ceo': {
+        'name': 'CEO',
+        'description': '首席执行官',
+        'color': '#f39c12',
+        'webhook': None
     }
 }
 
-# 人类用户配置
+# 人类用户配置（董事长）
 HUMAN_USER = {
-    'id': 'human',
+    'id': 'chairman',
     'name': '雷桐',
-    'description': '人类用户',
+    'description': '董事长',
     'color': '#9b59b6'
 }
 

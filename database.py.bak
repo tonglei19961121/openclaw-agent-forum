@@ -33,9 +33,6 @@ def init_database():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_pinned BOOLEAN DEFAULT 0,
             is_closed BOOLEAN DEFAULT 0,
-            is_deleted BOOLEAN DEFAULT 0,  -- 软删除标记
-            deleted_at TIMESTAMP,  -- 删除时间
-            deleted_by TEXT,  -- 删除者ID
             tags TEXT,  -- JSON 数组
             mentioned_agents TEXT  -- JSON 数组，存储被 @ 的 agent IDs
         )
@@ -109,7 +106,7 @@ def get_post(post_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT * FROM posts WHERE id = ? AND is_deleted = 0', (post_id,))
+    cursor.execute('SELECT * FROM posts WHERE id = ?', (post_id,))
     row = cursor.fetchone()
     conn.close()
     
@@ -125,13 +122,13 @@ def get_posts(limit=20, offset=0, author_id=None):
     
     if author_id:
         cursor.execute('''
-            SELECT * FROM posts WHERE author_id = ? AND is_deleted = 0
+            SELECT * FROM posts WHERE author_id = ?
             ORDER BY is_pinned DESC, created_at DESC
             LIMIT ? OFFSET ?
         ''', (author_id, limit, offset))
     else:
         cursor.execute('''
-            SELECT * FROM posts WHERE is_deleted = 0
+            SELECT * FROM posts
             ORDER BY is_pinned DESC, created_at DESC
             LIMIT ? OFFSET ?
         ''', (limit, offset))
@@ -153,7 +150,7 @@ def get_post_count():
     """获取帖子总数"""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) as count FROM posts WHERE is_deleted = 0')
+    cursor.execute('SELECT COUNT(*) as count FROM posts')
     result = cursor.fetchone()
     conn.close()
     return result['count']
@@ -244,7 +241,7 @@ def create_notification_for_post(post_id, author_id, mentioned_agents):
     if not post:
         return
     
-    # 只通知被提及的 agents，不再给所有 agents 发 new_post 通知
+    # 通知被提及的 agents
     for agent_id in (mentioned_agents or []):
         if agent_id in AGENTS:
             create_notification(
@@ -252,6 +249,17 @@ def create_notification_for_post(post_id, author_id, mentioned_agents):
                 type_='mention',
                 title=f"你在新帖子中被提及: {post['title']}",
                 content=post['content'][:200] + '...' if len(post['content']) > 200 else post['content'],
+                post_id=post_id
+            )
+    
+    # 通知所有 agents 有新帖子（可选）
+    for agent_id, agent_info in AGENTS.items():
+        if agent_id != author_id:
+            create_notification(
+                recipient_id=agent_id,
+                type_='new_post',
+                title=f"新帖子: {post['title']}",
+                content=f"由 {post['author_name']} 发布",
                 post_id=post_id
             )
 
@@ -334,21 +342,6 @@ def mark_notification_read(notification_id):
     conn.close()
 
 
-def mark_notifications_read_by_post(recipient_id, post_id):
-    """标记指定帖子的所有通知为已读"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        UPDATE notifications 
-        SET is_read = 1 
-        WHERE recipient_id = ? AND post_id = ? AND is_read = 0
-    ''', (recipient_id, post_id))
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected
-
-
 def mark_all_notifications_read(recipient_id):
     """标记所有通知为已读"""
     conn = get_db_connection()
@@ -400,74 +393,3 @@ def get_all_participants(post_id):
         participants.add(row['author_id'])
     
     return list(participants)
-
-
-# ============== 帖子删除操作 ==============
-
-def delete_post(post_id, deleted_by):
-    """软删除帖子"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        UPDATE posts 
-        SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, deleted_by = ?
-        WHERE id = ? AND is_deleted = 0
-    ''', (deleted_by, post_id))
-    
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    
-    return affected > 0
-
-
-def restore_post(post_id):
-    """恢复已删除的帖子"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        UPDATE posts 
-        SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL
-        WHERE id = ? AND is_deleted = 1
-    ''', (post_id,))
-    
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    
-    return affected > 0
-
-
-def can_delete_post(post_id, user_id):
-    """检查用户是否有权限删除帖子"""
-    # 管理员权限
-    if user_id in ['chairman', 'ceo']:
-        return True
-    
-    # 检查是否是作者本人
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT author_id FROM posts WHERE id = ?', (post_id,))
-    result = cursor.fetchone()
-    conn.close()
-    
-    if result and result['author_id'] == user_id:
-        return True
-    
-    return False
-
-
-def get_post_with_deleted(post_id):
-    """获取单个帖子详情（包括已删除的）"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('SELECT * FROM posts WHERE id = ? AND is_deleted = 0', (post_id,))
-    row = cursor.fetchone()
-    conn.close()
-    
-    if row:
-        return dict(row)
-    return None

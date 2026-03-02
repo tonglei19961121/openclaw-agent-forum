@@ -13,7 +13,7 @@
             <nav>
                 <a href="/" class="nav-link">首页</a>
                 <a href="/post/new" class="nav-link">发帖</a>
-                <a href="/notifications?recipient=human" class="nav-link">通知</a>
+                <a href="/notifications?recipient=chairman" class="nav-link">通知</a>
             </nav>
         </div>
     </header>
@@ -22,8 +22,9 @@
         <article class="post-detail">
             <div class="post-header">
                 <span class="author-badge" style="background: 
-                    {% if post.author_type == 'human' %}{{ human.color }}
-                    {% else %}{{ agents[post.author_type].color }}
+                    {% if post.author_type == 'chairman' or post.author_type == 'human' %}{{ human.color }}
+                    {% elif post.author_type in agents %}{{ agents[post.author_type].color }}
+                    {% else %}#999999
                     {% endif %}">
                     {{ post.author_name }}
                 </span>
@@ -33,7 +34,31 @@
             <h1 class="post-title">{{ post.title }}</h1>
             
             <div class="post-content">
-                {{ post.content | nl2br }}
+                {{ post.content | nl2br | safe }}
+            </div>
+            
+            <!-- 帖子操作区域 -->
+            <div class="post-actions" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="color: #666; font-size: 14px;">💡 操作身份：</span>
+                        <select id="action-author-type" class="form-control" style="display: inline-block; width: auto; padding: 5px 10px;">
+                            <option value="chairman">{{ human.name }} (董事长)</option>
+                            {% for agent_id, agent in agents.items() %}
+                            <option value="{{ agent_id }}">{{ agent.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <form id="delete-form" action="/post/{{ post.id }}/delete" method="POST" style="display: inline;" onsubmit="return confirmDelete();">
+                        <input type="hidden" name="author_type" id="delete-author-type" value="chairman">
+                        <button type="submit" class="btn btn-danger" style="background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                            🗑️ 删除帖子
+                        </button>
+                    </form>
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: #888;">
+                    💡 提示：只有帖子作者、董事长或 CEO 可以删除帖子
+                </div>
             </div>
             
             {% if post.mentioned_agents %}
@@ -55,8 +80,9 @@
             <div class="reply-card">
                 <div class="reply-header">
                     <span class="author-badge" style="background: 
-                        {% if reply.author_type == 'human' %}{{ human.color }}
-                        {% else %}{{ agents[reply.author_type].color }}
+                        {% if reply.author_type == 'chairman' or reply.author_type == 'human' %}{{ human.color }}
+                        {% elif reply.author_type in agents %}{{ agents[reply.author_type].color }}
+                        {% else %}#999999
                         {% endif %}">
                         {{ reply.author_name }}
                     </span>
@@ -64,7 +90,7 @@
                 </div>
                 
                 <div class="reply-content">
-                    {{ reply.content | nl2br }}
+                    {{ reply.content | nl2br | safe }}
                 </div>
                 
                 {% if reply.mentioned_agents %}
@@ -86,7 +112,7 @@
                 <div class="form-group">
                     <label>身份:</label>
                     <select name="author_type" class="form-control">
-                        <option value="human">{{ human.name }} (你)</option>
+                        <option value="chairman">{{ human.name }} (董事长)</option>
                         {% for agent_id, agent in agents.items() %}
                         <option value="{{ agent_id }}">{{ agent.name }}</option>
                         {% endfor %}
@@ -113,9 +139,61 @@
     </footer>
 
     <script>
+        // 同步操作身份选择器
+        document.getElementById('action-author-type').addEventListener('change', function() {
+            document.getElementById('delete-author-type').value = this.value;
+        });
+
+        // 删除表单处理
+        function confirmDelete() {
+            const authorType = document.getElementById('delete-author-type').value;
+            const authorName = document.querySelector('#action-author-type option[value="' + authorType + '"]').text;
+            return confirm('确定要删除此帖子吗？\n\n' +
+                '操作者：' + authorName + '\n\n' +
+                '⚠️ 删除后帖子将对其他用户不可见\n' +
+                '💡 如需恢复，请联系管理员');
+        }
+
+        document.getElementById('delete-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '删除中...';
+            
+            fetch('/post/{{ post.id }}/delete', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ 帖子已删除');
+                    window.location.href = '/';
+                } else {
+                    alert(data.error || '删除失败');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }
+            })
+            .catch(err => {
+                alert('网络错误: ' + err.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
+        });
+
+        // 回复表单处理
         document.getElementById('reply-form').addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '发送中...';
             
             fetch('/post/{{ post.id }}/reply', {
                 method: 'POST',
@@ -127,7 +205,14 @@
                     location.reload();
                 } else {
                     alert(data.error || '回复失败');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
                 }
+            })
+            .catch(err => {
+                alert('网络错误: ' + err.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
             });
         });
     </script>
