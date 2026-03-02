@@ -19,12 +19,7 @@ from database import (
     get_db_connection
 )
 
-# 导入自然语言接口
-try:
-    from ai.natural_language import NaturalLanguageInterface
-    nli = NaturalLanguageInterface(AGENTS)
-except ImportError:
-    nli = None
+
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -427,98 +422,6 @@ def health():
     """健康检查"""
     return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
 
-
-# ============== 自然语言接口 ==============
-
-@app.route('/api/nli/parse', methods=['POST'])
-def api_nli_parse():
-    """自然语言解析 API
-    
-    请求体:
-    {
-        "text": "创建一个帖子：Q4 战略规划",
-        "author_id": "chairman"
-    }
-    
-    响应:
-    {
-        "action": "create_post",
-        "params": {
-            "title": "Q4 战略规划",
-            "content": "Q4 战略规划",
-            "author_id": "chairman",
-            "mentioned_agents": []
-        }
-    }
-    """
-    if nli is None:
-        return jsonify({'error': '自然语言接口未启用'}), 503
-    
-    data = request.get_json()
-    text = data.get('text', '').strip()
-    author_id = data.get('author_id', 'chairman')
-    
-    if not text:
-        return jsonify({'error': 'text 不能为空'}), 400
-    
-    result = nli.parse(text, author_id)
-    return jsonify(result)
-
-
-@app.route('/api/nli/execute', methods=['POST'])
-def api_nli_execute():
-    """自然语言执行 API
-    
-    直接执行自然语言指令
-    
-    请求体:
-    {
-        "text": "创建一个帖子：Q4 战略规划 @ceo @cto",
-        "author_id": "chairman"
-    }
-    """
-    if nli is None:
-        return jsonify({'error': '自然语言接口未启用'}), 503
-    
-    data = request.get_json()
-    text = data.get('text', '').strip()
-    author_id = data.get('author_id', 'chairman')
-    
-    if not text:
-        return jsonify({'error': 'text 不能为空'}), 400
-    
-    # 数据库操作函数映射
-    db_funcs = {
-        'create_post': create_post,
-        'create_reply': create_reply,
-        'get_post': get_post,
-        'get_posts': lambda **kwargs: get_posts(limit=kwargs.get('limit', 20)),
-        'get_replies': get_replies,
-        'get_notifications': get_notifications,
-        'delete_post': lambda **kwargs: delete_post(kwargs['post_id'], kwargs['author_id']),
-    }
-    
-    result = nli.execute(text, author_id, db_funcs)
-    return jsonify(result)
-
-
-@app.route('/api/nli/help', methods=['GET'])
-def api_nli_help():
-    """自然语言接口帮助"""
-    return jsonify({
-        'description': '自然语言接口支持以下指令',
-        'examples': [
-            {'text': '创建一个帖子：标题内容', 'action': 'create_post'},
-            {'text': '回复帖子#123：回复内容', 'action': 'reply_post'},
-            {'text': '查看通知', 'action': 'check_notifications'},
-            {'text': '列出帖子', 'action': 'list_posts'},
-            {'text': '删除帖子#123', 'action': 'delete_post'},
-        ],
-        'endpoints': {
-            'parse': {'method': 'POST', 'path': '/api/nli/parse', 'description': '解析自然语言'},
-            'execute': {'method': 'POST', 'path': '/api/nli/execute', 'description': '执行自然语言指令'},
-        }
-    })
 
 # ============== 帖子删除 API ==============
 
