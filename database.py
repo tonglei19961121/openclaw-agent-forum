@@ -51,6 +51,9 @@ def init_database():
             author_name TEXT NOT NULL,
             author_type TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_deleted BOOLEAN DEFAULT 0,  -- 软删除标记
+            deleted_at TIMESTAMP,  -- 删除时间
+            deleted_by TEXT,  -- 删除者ID
             mentioned_agents TEXT,  -- JSON 数组
             FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
         )
@@ -187,15 +190,21 @@ def create_reply(post_id, content, author_id, author_name, author_type='human', 
     return reply_id
 
 
-def get_replies(post_id):
+def get_replies(post_id, include_deleted=False):
     """获取帖子的所有回复"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute('''
-        SELECT * FROM replies WHERE post_id = ?
-        ORDER BY created_at ASC
-    ''', (post_id,))
+    if include_deleted:
+        cursor.execute('''
+            SELECT * FROM replies WHERE post_id = ?
+            ORDER BY created_at ASC
+        ''', (post_id,))
+    else:
+        cursor.execute('''
+            SELECT * FROM replies WHERE post_id = ? AND is_deleted = 0
+            ORDER BY created_at ASC
+        ''', (post_id,))
     
     rows = cursor.fetchall()
     conn.close()
@@ -209,11 +218,14 @@ def get_replies(post_id):
     return replies
 
 
-def get_reply_count(post_id):
+def get_reply_count(post_id, include_deleted=False):
     """获取帖子的回复数"""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) as count FROM replies WHERE post_id = ?', (post_id,))
+    if include_deleted:
+        cursor.execute('SELECT COUNT(*) as count FROM replies WHERE post_id = ?', (post_id,))
+    else:
+        cursor.execute('SELECT COUNT(*) as count FROM replies WHERE post_id = ? AND is_deleted = 0', (post_id,))
     result = cursor.fetchone()
     conn.close()
     return result['count']
@@ -404,8 +416,14 @@ def get_all_participants(post_id):
 
 # ============== 帖子删除操作 ==============
 
-def delete_post(post_id, deleted_by):
-    """软删除帖子"""
+def delete_post(post_id, deleted_by, cascade=False):
+    """软删除帖子
+    
+    Args:
+        post_id: 帖子ID
+        deleted_by: 删除者ID
+        cascade: 是否级联删除关联回复
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -416,14 +434,28 @@ def delete_post(post_id, deleted_by):
     ''', (deleted_by, post_id))
     
     affected = cursor.rowcount
+    
+    # 级联删除关联回复
+    if cascade and affected > 0:
+        cursor.execute('''
+            UPDATE replies 
+            SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, deleted_by = ?
+            WHERE post_id = ? AND is_deleted = 0
+        ''', (deleted_by, post_id))
+    
     conn.commit()
     conn.close()
     
     return affected > 0
 
 
-def restore_post(post_id):
-    """恢复已删除的帖子"""
+def restore_post(post_id, cascade=False):
+    """恢复已删除的帖子
+    
+    Args:
+        post_id: 帖子ID
+        cascade: 是否级联恢复关联回复
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -434,6 +466,15 @@ def restore_post(post_id):
     ''', (post_id,))
     
     affected = cursor.rowcount
+    
+    # 级联恢复关联回复
+    if cascade and affected > 0:
+        cursor.execute('''
+            UPDATE replies 
+            SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL
+            WHERE post_id = ? AND is_deleted = 1
+        ''', (post_id,))
+    
     conn.commit()
     conn.close()
     
@@ -464,10 +505,110 @@ def get_post_with_deleted(post_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT * FROM posts WHERE id = ? AND is_deleted = 0', (post_id,))
+    cursor.execute('SELECT * FROM posts WHERE id = ?', (post_id,))
     row = cursor.fetchone()
     conn.close()
     
     if row:
-        return dict(row)
+        post = dict(row)
+        post['tags'] = json.loads(post.get('tags') or '[]')
+        post['mentioned_agents'] = json.loads(post.get('mentioned_agents') or '[]')
+        return post
+    return None
+
+
+def get_deleted_posts(limit=50, offset=0):
+    """获取已删除的帖子列表（用于管理）"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM posts WHERE is_deleted = 1
+        ORDER BY deleted_at DESC
+        LIMIT ? OFFSET ?
+    ''', (limit, offset))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    posts = []
+    for row in rows:
+        post = dict(row)
+        post['tags'] = json.loads(post['tags'] or '[]')
+        post['mentioned_agents'] = json.loads(post['mentioned_agents'] or '[]')
+        posts.append(post)
+    
+    return posts
+
+
+# ============== 回复删除操作 ==============
+
+def delete_reply(reply_id, deleted_by):
+    """软删除回复"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE replies 
+        SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, deleted_by = ?
+        WHERE id = ? AND is_deleted = 0
+    ''', (deleted_by, reply_id))
+    
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return affected > 0
+
+
+def restore_reply(reply_id):
+    """恢复已删除的回复"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE replies 
+        SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL
+        WHERE id = ? AND is_deleted = 1
+    ''', (reply_id,))
+    
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return affected > 0
+
+
+def can_delete_reply(reply_id, user_id):
+    """检查用户是否有权限删除回复"""
+    # 管理员权限
+    if user_id in ['chairman', 'ceo']:
+        return True
+    
+    # 检查是否是作者本人
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT author_id FROM replies WHERE id = ?', (reply_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if result and result['author_id'] == user_id:
+        return True
+    
+    return False
+
+
+def get_reply(reply_id):
+    """获取单个回复详情（包括已删除的）"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM replies WHERE id = ?', (reply_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        reply = dict(row)
+        reply['mentioned_agents'] = json.loads(reply['mentioned_agents'] or '[]')
+        return reply
     return None

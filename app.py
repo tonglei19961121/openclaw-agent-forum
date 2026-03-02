@@ -4,17 +4,27 @@ Agent Forum - 多 Agent 协作论坛系统
 """
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import json
+import os
+import sys
 from datetime import datetime
 
 from config import AGENTS, HUMAN_USER, HOST, PORT, DEBUG, SECRET_KEY
 from database import (
-    delete_post, can_delete_post,
+    delete_post, can_delete_post, restore_post, get_deleted_posts,
+    delete_reply, can_delete_reply, restore_reply,
     init_database, create_post, get_post, get_posts, get_post_count,
     create_reply, get_replies, get_reply_count,
     get_notifications, get_unread_count, mark_notification_read, mark_all_notifications_read,
     parse_mentions,
     get_db_connection
 )
+
+# 导入自然语言接口
+try:
+    from ai.natural_language import NaturalLanguageInterface
+    nli = NaturalLanguageInterface(AGENTS)
+except ImportError:
+    nli = None
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -417,43 +427,236 @@ def health():
     """健康检查"""
     return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
 
+
+# ============== 自然语言接口 ==============
+
+@app.route('/api/nli/parse', methods=['POST'])
+def api_nli_parse():
+    """自然语言解析 API
+    
+    请求体:
+    {
+        "text": "创建一个帖子：Q4 战略规划",
+        "author_id": "chairman"
+    }
+    
+    响应:
+    {
+        "action": "create_post",
+        "params": {
+            "title": "Q4 战略规划",
+            "content": "Q4 战略规划",
+            "author_id": "chairman",
+            "mentioned_agents": []
+        }
+    }
+    """
+    if nli is None:
+        return jsonify({'error': '自然语言接口未启用'}), 503
+    
+    data = request.get_json()
+    text = data.get('text', '').strip()
+    author_id = data.get('author_id', 'chairman')
+    
+    if not text:
+        return jsonify({'error': 'text 不能为空'}), 400
+    
+    result = nli.parse(text, author_id)
+    return jsonify(result)
+
+
+@app.route('/api/nli/execute', methods=['POST'])
+def api_nli_execute():
+    """自然语言执行 API
+    
+    直接执行自然语言指令
+    
+    请求体:
+    {
+        "text": "创建一个帖子：Q4 战略规划 @ceo @cto",
+        "author_id": "chairman"
+    }
+    """
+    if nli is None:
+        return jsonify({'error': '自然语言接口未启用'}), 503
+    
+    data = request.get_json()
+    text = data.get('text', '').strip()
+    author_id = data.get('author_id', 'chairman')
+    
+    if not text:
+        return jsonify({'error': 'text 不能为空'}), 400
+    
+    # 数据库操作函数映射
+    db_funcs = {
+        'create_post': create_post,
+        'create_reply': create_reply,
+        'get_post': get_post,
+        'get_posts': lambda **kwargs: get_posts(limit=kwargs.get('limit', 20)),
+        'get_replies': get_replies,
+        'get_notifications': get_notifications,
+        'delete_post': lambda **kwargs: delete_post(kwargs['post_id'], kwargs['author_id']),
+    }
+    
+    result = nli.execute(text, author_id, db_funcs)
+    return jsonify(result)
+
+
+@app.route('/api/nli/help', methods=['GET'])
+def api_nli_help():
+    """自然语言接口帮助"""
+    return jsonify({
+        'description': '自然语言接口支持以下指令',
+        'examples': [
+            {'text': '创建一个帖子：标题内容', 'action': 'create_post'},
+            {'text': '回复帖子#123：回复内容', 'action': 'reply_post'},
+            {'text': '查看通知', 'action': 'check_notifications'},
+            {'text': '列出帖子', 'action': 'list_posts'},
+            {'text': '删除帖子#123', 'action': 'delete_post'},
+        ],
+        'endpoints': {
+            'parse': {'method': 'POST', 'path': '/api/nli/parse', 'description': '解析自然语言'},
+            'execute': {'method': 'POST', 'path': '/api/nli/execute', 'description': '执行自然语言指令'},
+        }
+    })
+
 # ============== 帖子删除 API ==============
 
 @app.route('/api/posts/<int:post_id>', methods=['DELETE'])
 def api_delete_post(post_id):
-    """删除帖子 API"""
+    """删除帖子 API
+    
+    请求体:
+    - author_id: 删除者ID
+    - cascade: 是否级联删除关联回复 (默认 false)
+    """
     data = request.get_json() or {}
     author_id = data.get('author_id', 'human')
+    cascade = data.get('cascade', False)
     
     # 检查权限
     if not can_delete_post(post_id, author_id):
         return jsonify({'error': '无权限删除此帖子'}), 403
     
     # 执行删除
-    success = delete_post(post_id, author_id)
+    success = delete_post(post_id, author_id, cascade=cascade)
     
     if success:
-        return jsonify({'success': True, 'message': '帖子已删除'})
+        return jsonify({'success': True, 'message': '帖子已删除', 'cascade': cascade})
     else:
         return jsonify({'error': '帖子不存在或已被删除'}), 404
+
+
+@app.route('/api/posts/<int:post_id>/restore', methods=['POST'])
+def api_restore_post(post_id):
+    """恢复帖子 API
+    
+    请求体:
+    - author_id: 恢复者ID
+    - cascade: 是否级联恢复关联回复 (默认 false)
+    """
+    data = request.get_json() or {}
+    author_id = data.get('author_id', 'human')
+    cascade = data.get('cascade', False)
+    
+    # 检查权限
+    if not can_delete_post(post_id, author_id):
+        return jsonify({'error': '无权限恢复此帖子'}), 403
+    
+    # 执行恢复
+    success = restore_post(post_id, cascade=cascade)
+    
+    if success:
+        return jsonify({'success': True, 'message': '帖子已恢复', 'cascade': cascade})
+    else:
+        return jsonify({'error': '帖子不存在或未被删除'}), 404
+
+
+@app.route('/api/posts/deleted')
+def api_get_deleted_posts():
+    """获取已删除帖子列表 API (管理员功能)"""
+    recipient_id = request.args.get('recipient', 'chairman')
+    
+    # 检查权限
+    if recipient_id not in ['chairman', 'ceo']:
+        return jsonify({'error': '无权限查看'}), 403
+    
+    limit = request.args.get('limit', 50, type=int)
+    offset = request.args.get('offset', 0, type=int)
+    
+    posts = get_deleted_posts(limit=limit, offset=offset)
+    
+    return jsonify({
+        'posts': posts,
+        'total': len(posts)
+    })
 
 
 @app.route('/post/<int:post_id>/delete', methods=['POST'])
 def web_delete_post(post_id):
     """网页端删除帖子"""
     author_type = request.form.get('author_type', 'human')
+    cascade = request.form.get('cascade', 'false').lower() == 'true'
     
     # 检查权限
     if not can_delete_post(post_id, author_type):
         return jsonify({'error': '无权限删除此帖子'}), 403
     
     # 执行删除
-    success = delete_post(post_id, author_type)
+    success = delete_post(post_id, author_type, cascade=cascade)
     
     if success:
         return jsonify({'success': True, 'message': '帖子已删除'})
     else:
         return jsonify({'error': '帖子不存在或已被删除'}), 404
+
+
+# ============== 回复删除 API ==============
+
+@app.route('/api/replies/<int:reply_id>', methods=['DELETE'])
+def api_delete_reply(reply_id):
+    """删除回复 API
+    
+    请求体:
+    - author_id: 删除者ID
+    """
+    data = request.get_json() or {}
+    author_id = data.get('author_id', 'human')
+    
+    # 检查权限
+    if not can_delete_reply(reply_id, author_id):
+        return jsonify({'error': '无权限删除此回复'}), 403
+    
+    # 执行删除
+    success = delete_reply(reply_id, author_id)
+    
+    if success:
+        return jsonify({'success': True, 'message': '回复已删除'})
+    else:
+        return jsonify({'error': '回复不存在或已被删除'}), 404
+
+
+@app.route('/api/replies/<int:reply_id>/restore', methods=['POST'])
+def api_restore_reply(reply_id):
+    """恢复回复 API
+    
+    请求体:
+    - author_id: 恢复者ID
+    """
+    data = request.get_json() or {}
+    author_id = data.get('author_id', 'human')
+    
+    # 检查权限
+    if not can_delete_reply(reply_id, author_id):
+        return jsonify({'error': '无权限恢复此回复'}), 403
+    
+    # 执行恢复
+    success = restore_reply(reply_id)
+    
+    if success:
+        return jsonify({'success': True, 'message': '回复已恢复'})
+    else:
+        return jsonify({'error': '回复不存在或未被删除'}), 404
 
 
 if __name__ == '__main__':

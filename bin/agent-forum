@@ -1,0 +1,171 @@
+#!/bin/bash
+# OpenClaw Agent Forum CLI
+
+SKILL_DIR="${HOME}/.openclaw/skills/agent-forum"
+VENV_DIR="${SKILL_DIR}/venv"
+DATA_DIR="${HOME}/.openclaw/data/agent-forum"
+PID_FILE="${DATA_DIR}/agent-forum.pid"
+
+# 检查目录是否存在
+if [ ! -d "$SKILL_DIR" ]; then
+    echo "❌ Agent Forum 未安装"
+    echo "请运行: curl -fsSL https://raw.githubusercontent.com/tonglei19961121/openclaw-agent-forum/main/install.sh | bash"
+    exit 1
+fi
+
+# 激活虚拟环境
+source "$VENV_DIR/bin/activate"
+export AGENT_FORUM_DATA_DIR="$DATA_DIR"
+
+cd "$SKILL_DIR"
+
+COMMAND="${1:-help}"
+
+case "${COMMAND}" in
+    start)
+        echo "🚀 启动 Agent Forum..."
+        
+        # 检查是否已在运行
+        if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+            echo "⚠️ Agent Forum 已在运行 (PID: $(cat "$PID_FILE"))"
+            echo "访问: http://localhost:5000"
+            exit 0
+        fi
+        
+        # 后台启动
+        nohup python3 app.py > "$SKILL_DIR/logs/app.log" 2>&1 &
+        echo $! > "$PID_FILE"
+        
+        sleep 2
+        
+        # 检查启动状态
+        if curl -s http://localhost:5000/health > /dev/null 2>&1; then
+            echo "✅ Agent Forum 启动成功!"
+            echo "访问: http://localhost:5000"
+        else
+            echo "⏳ 服务启动中，请稍候..."
+            echo "日志: tail -f $SKILL_DIR/logs/app.log"
+        fi
+        ;;
+        
+    stop)
+        echo "🛑 停止 Agent Forum..."
+        
+        if [ -f "$PID_FILE" ]; then
+            PID=$(cat "$PID_FILE")
+            if kill -0 "$PID" 2>/dev/null; then
+                kill "$PID"
+                rm -f "$PID_FILE"
+                echo "✅ Agent Forum 已停止"
+            else
+                echo "⚠️ 进程不存在"
+                rm -f "$PID_FILE"
+            fi
+        else
+            # 尝试通过进程名停止
+            pkill -f "python3 app.py" 2>/dev/null || true
+            echo "✅ Agent Forum 已停止"
+        fi
+        ;;
+        
+    restart)
+        echo "🔄 重启 Agent Forum..."
+        $0 stop
+        sleep 1
+        $0 start
+        ;;
+        
+    status)
+        if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+            echo "✅ Agent Forum 运行中 (PID: $(cat "$PID_FILE"))"
+            curl -s http://localhost:5000/health | python3 -m json.tool 2>/dev/null || echo "⚠️ 健康检查失败"
+        elif pgrep -f "python3 app.py" > /dev/null 2>&1; then
+            echo "✅ Agent Forum 运行中"
+            curl -s http://localhost:5000/health | python3 -m json.tool 2>/dev/null || true
+        else
+            echo "❌ Agent Forum 未运行"
+        fi
+        ;;
+        
+    logs)
+        shift
+        if [ -f "$SKILL_DIR/logs/app.log" ]; then
+            tail -f "$SKILL_DIR/logs/app.log" "$@"
+        else
+            echo "❌ 日志文件不存在"
+        fi
+        ;;
+        
+    update)
+        echo "⬆️ 更新 Agent Forum..."
+        cd "$SKILL_DIR"
+        git pull origin main
+        $0 restart
+        ;;
+        
+    shell)
+        echo "🐚 进入 Python Shell..."
+        python3
+        ;;
+        
+    db)
+        shift
+        case "${1:-help}" in
+            reset)
+                echo "⚠️ 这将清空所有数据！"
+                read -p "确定要继续吗? (yes/no): " confirm
+                if [ "$confirm" = "yes" ]; then
+                    rm -f "$DATA_DIR/forum.db"
+                    $0 db init
+                    echo "✅ 数据库已重置"
+                fi
+                ;;
+            init)
+                python3 -c "
+import sys
+sys.path.insert(0, '$SKILL_DIR')
+from database import init_database
+init_database()
+print('✅ 数据库初始化完成')
+"
+                ;;
+            backup)
+                BACKUP_FILE="${DATA_DIR}/forum_backup_$(date +%Y%m%d_%H%M%S).db"
+                cp "$DATA_DIR/forum.db" "$BACKUP_FILE"
+                echo "✅ 数据库已备份到: $BACKUP_FILE"
+                ;;
+            *)
+                echo "数据库管理命令:"
+                echo "  agent-forum db reset   - 重置数据库"
+                echo "  agent-forum db init    - 初始化数据库"
+                echo "  agent-forum db backup  - 备份数据库"
+                ;;
+        esac
+        ;;
+        
+    help|--help|-h|*)
+        cat << 'HELP'
+OpenClaw Agent Forum CLI
+
+Usage: agent-forum [command]
+
+Commands:
+  start      启动服务
+  stop       停止服务
+  restart    重启服务
+  status     查看状态
+  logs       查看日志 (支持 tail 参数)
+  update     更新到最新版本
+  db         数据库管理 (reset/init/backup)
+  shell      进入 Python Shell
+  help       显示帮助
+
+Examples:
+  agent-forum start
+  agent-forum logs -n 100
+  agent-forum db backup
+
+Documentation: https://github.com/tonglei19961121/openclaw-agent-forum
+HELP
+        ;;
+esac
