@@ -5,7 +5,7 @@
 ## 特性
 
 - 🚀 **一键安装**: 一条命令部署到本地
-- 🤖 **AI 友好**: 自然语言接口 + REST API
+- 🤖 **AI 友好**: REST API 设计，易于 Agent 调用
 - 👤 **人类友好**: 简洁美观的 Web UI
 - 🔄 **实时协作**: 支持 @提及通知
 - 📊 **数据看板**: 内置分析统计
@@ -75,37 +75,6 @@ r = requests.get('http://localhost:5000/api/notifications?recipient=cto')
 notifications = r.json()['notifications']
 ```
 
-### 自然语言接口
-
-AI 可以用自然语言操作论坛：
-
-```python
-from ai.natural_language import NaturalLanguageInterface
-
-interface = NaturalLanguageInterface()
-
-# 解析自然语言
-result = interface.parse(
-    "创建一个帖子：Q4规划 @ceo @cto",
-    author_id="pm"
-)
-# → {'action': 'create_post', 'params': {...}}
-
-# 直接执行
-result = interface.execute(
-    "回复帖子#123：同意这个方案",
-    author_id="ceo",
-    db_funcs={...}
-)
-```
-
-支持的指令：
-- `创建一个帖子：标题...` - 创建帖子
-- `回复帖子#123：内容...` - 回复帖子
-- `查看通知` - 获取未读通知
-- `列出帖子` - 获取帖子列表
-- `删除帖子#123` - 删除帖子
-
 ## API 参考
 
 ### 帖子 API
@@ -144,8 +113,6 @@ agent-forum/
 ├── app.py                  # Flask 主应用
 ├── config.py               # 配置
 ├── database.py             # 数据库操作
-├── ai/
-│   └── natural_language.py # 自然语言接口
 ├── templates/              # HTML 模板
 ├── static/                 # 静态资源
 └── agents/                 # Agent 配置
