@@ -24,13 +24,15 @@ from database import (
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+from markupsafe import escape, Markup
+
 # 添加 nl2br 过滤器
 @app.template_filter('nl2br')
 def nl2br_filter(text):
-    """将换行符转换为 <br> 标签"""
-    if text:
-        return text.replace('\n', '\u003cbr\u003e')
-    return text
+    """将换行符转换为 <br> 标签，并处理 HTML 转义以防 XSS"""
+    if not text:
+        return text
+    return Markup(escape(text).replace('\n', '\u003cbr\u003e'))
 
 # 初始化数据库
 init_database()
@@ -210,7 +212,11 @@ def api_mark_all_read():
     """
     data = request.get_json() or {}
     recipient_id = data.get('recipient_id', request.form.get('recipient_id', 'chairman'))
-    before_hours = data.get('before_hours', request.form.get('before_hours', type=int))
+    
+    # 获取 before_hours，确保解析正确
+    before_hours = data.get('before_hours')
+    if before_hours is None:
+        before_hours = request.form.get('before_hours', type=int)
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -562,13 +568,166 @@ def api_restore_reply(reply_id):
         return jsonify({'error': '回复不存在或未被删除'}), 404
 
 
-if __name__ == '__main__':
-    print(f"Agent Forum 启动中...")
-    print(f"访问地址: http://{HOST}:{PORT}")
-    app.run(host=HOST, port=PORT, debug=DEBUG, use_reloader=False)
+# ============== 任务卡片系统 API ==============
+
+from tasks import parse_assign_command, create_task_with_notification, get_tasks_by_post, update_task_status, get_tasks_by_assignee
+
+@app.route('/api/tasks', methods=['POST'])
+def api_create_task():
+    """创建任务 API"""
+    data = request.get_json()
+    
+    post_id = data.get('post_id')
+    content = data.get('content', '')
+    assigner = data.get('assigner', 'human')
+    
+    if not post_id or not content:
+        return jsonify({'error': 'post_id 和 content 不能为空'}), 400
+    
+    task_created = create_task_with_notification(post_id, content, assigner)
+    
+    if not task_created:
+        return jsonify({'error': '无法解析 /assign 指令或 assignee 无效。格式: /assign @agent 任务描述 [截止时间]'}), 400
+    
+    return jsonify({
+        'success': True,
+        **task_created
+    })
+
+
+@app.route('/api/posts/<int:post_id>/tasks', methods=['GET'])
+def api_get_post_tasks(post_id):
+    """获取帖子的所有任务"""
+    status = request.args.get('status')
+    
+    tasks = get_tasks_by_post(post_id)
+    if status:
+        tasks = [t for t in tasks if t['status'] == status]
+    
+    # 获取统计信息
+    stats = {'todo': 0, 'doing': 0, 'done': 0, 'cancelled': 0}
+    for task in tasks:
+        stats[task['status']] = stats.get(task['status'], 0) + 1
+    
+    return jsonify({
+        'tasks': tasks,
+        'stats': stats,
+        'total': len(tasks)
+    })
+
+
+@app.route('/api/tasks/<task_id>', methods=['PATCH'])
+def api_update_task(task_id):
+    """更新任务状态"""
+    data = request.get_json()
+    new_status = data.get('status')
+    updated_by = data.get('updated_by', 'human')
+    
+    if new_status not in ['todo', 'doing', 'done', 'cancelled']:
+        return jsonify({'error': '无效的状态'}), 400
+    
+    # 这里我们保留 app.py 的通知逻辑，或者也可以考虑移动到 tasks.py
+    # 暂时保持现状但清理代码
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM tasks WHERE task_id = ?', (task_id,))
+    task = cursor.fetchone()
+    
+    if not task:
+        conn.close()
+        return jsonify({'error': '任务不存在'}), 404
+    
+    success = update_task_status(task_id, new_status)
+    
+    if success:
+        status_text = {
+            'todo': '待处理', 'doing': '进行中', 'done': '已完成', 'cancelled': '已取消'
+        }.get(new_status, new_status)
+        
+        # 通知相关人员
+        for role in ['assigner', 'assignee']:
+            if updated_by != task[role]:
+                cursor.execute('''
+                    INSERT INTO notifications (recipient_id, type, title, content, post_id)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (task[role], 'task_updated', 
+                      f"任务状态更新: {task['title'][:40]}...",
+                      f"状态变更为: {status_text}", task['post_id']))
+        conn.commit()
+    
+    conn.close()
+    
+    if success:
+        return jsonify({'success': True, 'task_id': task_id, 'status': new_status})
+    return jsonify({'error': '更新失败'}), 500
+
+
+@app.route('/api/tasks/<task_id>', methods=['DELETE'])
+def api_delete_task(task_id):
+    """删除任务（软删除，设置状态为cancelled）"""
+    success = update_task_status(task_id, 'cancelled')
+    if success:
+        return jsonify({'success': True, 'message': '任务已取消'})
+    return jsonify({'error': '任务不存在'}), 404
+
+
+@app.route('/api/agents/<agent_id>/tasks', methods=['GET'])
+def api_get_agent_tasks(agent_id):
+    """获取指定Agent的所有任务"""
+    status = request.args.get('status')
+    tasks = get_tasks_by_assignee(agent_id)
+    if status:
+        tasks = [t for t in tasks if t['status'] == status]
+    return jsonify({'tasks': tasks, 'total': len(tasks)})
+
+
+@app.route('/api/posts/<int:post_id>/reply-with-task', methods=['POST'])
+def api_reply_with_task(post_id):
+    """回复帖子并自动解析创建任务"""
+    data = request.get_json()
+    content = data.get('content', '').strip()
+    author_id = data.get('author_id', 'human')
+    
+    if not content:
+        return jsonify({'error': '回复内容不能为空'}), 400
+    
+    # 确定作者信息
+    if author_id == 'human':
+        author_name = HUMAN_USER['name']
+        author_type = 'human'
+    elif author_id in AGENTS:
+        author_name = AGENTS[author_id]['name']
+        author_type = author_id
+    else:
+        return jsonify({'error': '无效的 author_id'}), 400
+    
+    # 创建回复
+    reply_id = create_reply(
+        post_id=post_id,
+        content=content,
+        author_id=author_id,
+        author_name=author_name,
+        author_type=author_type,
+        mentioned_agents=parse_mentions(content)
+    )
+    
+    # 尝试创建任务
+    task_created = create_task_with_notification(post_id, content, author_id, reply_id=reply_id)
+    
+    return jsonify({
+        'success': True,
+        'reply_id': reply_id,
+        'task_created': task_created
+    })
 
 
 @app.route("/analytics")
 def analytics_dashboard():
     """数据看板页面"""
     return render_template("analytics_dashboard.html")
+
+
+if __name__ == '__main__':
+    print(f"Agent Forum 启动中...")
+    print(f"访问地址: http://{HOST}:{PORT}")
+    app.run(host=HOST, port=PORT, debug=DEBUG, use_reloader=False)

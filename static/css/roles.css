@@ -1,0 +1,327 @@
+/**
+ * Role Badge System CSS
+ * 角色标识系统样式
+ * 为不同角色（CEO/CTO/CMO/PM/Lucy）添加视觉标识
+ */
+
+/* ========================================
+   角色标识基础样式
+   ======================================== */
+
+/* 角色标识通用样式 */
+.role-badge-ceo::before,
+.role-badge-cto::before,
+.role-badge-cmo::before,
+.role-badge-pm::before,
+.role-badge-lucy::before {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 6px;
+    font-size: 14px;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+/* 各角色图标 */
+.role-badge-ceo::before {
+    content: "👑";
+}
+
+.role-badge-cto::before {
+    content: "⚙️";
+}
+
+.role-badge-cmo::before {
+    content: "📢";
+}
+
+.role-badge-pm::before {
+    content: "📋";
+}
+
+.role-badge-lucy::before {
+    content: "🐱";
+}
+
+/* ========================================
+   帖子列表中的角色标识
+   ======================================== */
+
+/* 帖子作者区域 */
+.post-author[data-author-type="ceo"] .author-name::before,
+.post-author[data-author-type="cto"] .author-name::before,
+.post-author[data-author-type="cmo"] .author-name::before,
+.post-author[data-author-type="pm"] .author-name::before,
+.post-author[data-author-type="lucy"] .author-name::before {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-right: 4px;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.post-author[data-author-type="ceo"] .author-name::before { content: "👑"; }
+.post-author[data-author-type="cto"] .author-name::before { content: "⚙️"; }
+.post-author[data-author-type="cmo"] .author-name::before { content: "📢"; }
+.post-author[data-author-type="pm"] .author-name::before { content: "📋"; }
+.post-author[data-author-type="lucy"] .author-name::before { content: "🐱"; }
+
+/* 角色标签样式 */
+.author-role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.author-role-badge.role-ceo {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: #92400e;
+}
+
+.author-role-badge.role-cto {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    color: #1e40af;
+}
+
+.author-role-badge.role-cmo {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    color: #991b1b;
+}
+
+.author-role-badge.role-pm {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    color: #065f46;
+}
+
+.author-role-badge.role-lucy {
+    background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+    color: #5b21b6;
+}
+
+/* ========================================
+   回复区域的角色标识
+   ======================================== */
+
+/* 回复作者 */
+.reply-author[data-author-type="ceo"] .author-name::before,
+.reply-author[data-author-type="cto"] .author-name::before,
+.reply-author[data-author-type="cmo"] .author-name::before,
+.reply-author[data-author-type="pm"] .author-name::before,
+.reply-author[data-author-type="lucy"] .author-name::before {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    font-size: 11px;
+    vertical-align: middle;
+}
+
+.reply-author[data-author-type="ceo"] .author-name::before { content: "👑"; }
+.reply-author[data-author-type="cto"] .author-name::before { content: "⚙️"; }
+.reply-author[data-author-type="cmo"] .author-name::before { content: "📢"; }
+.reply-author[data-author-type="pm"] .author-name::before { content: "📋"; }
+.reply-author[data-author-type="lucy"] .author-name::before { content: "🐱"; }
+
+/* ========================================
+   导航栏角色标识
+   ======================================== */
+
+/* 用户头像旁的角色标识 */
+.user-avatar[data-role="ceo"]::after,
+.user-avatar[data-role="cto"]::after,
+.user-avatar[data-role="cmo"]::after,
+.user-avatar[data-role="pm"]::after,
+.user-avatar[data-role="lucy"]::after {
+    content: "";
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid white;
+    background-size: 10px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.user-avatar[data-role="ceo"]::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='14'%3E👑%3C/text%3E%3C/svg%3E");
+    background-color: #fbbf24;
+}
+
+.user-avatar[data-role="cto"]::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='14'%3E⚙️%3C/text%3E%3C/svg%3E");
+    background-color: #60a5fa;
+}
+
+.user-avatar[data-role="cmo"]::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='14'%3E📢%3C/text%3E%3C/svg%3E");
+    background-color: #f87171;
+}
+
+.user-avatar[data-role="pm"]::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='14'%3E📋%3C/text%3E%3C/svg%3E");
+    background-color: #34d399;
+}
+
+.user-avatar[data-role="lucy"]::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='14'%3E🐱%3C/text%3E%3C/svg%3E");
+    background-color: #a78bfa;
+}
+
+/* ========================================
+   @提及时的角色高亮
+   ======================================== */
+
+/* @提及样式 */
+.mention-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 0.9em;
+}
+
+.mention-badge[data-role="ceo"] {
+    background: rgba(251, 191, 36, 0.2);
+    color: #92400e;
+}
+
+.mention-badge[data-role="cto"] {
+    background: rgba(96, 165, 250, 0.2);
+    color: #1e40af;
+}
+
+.mention-badge[data-role="cmo"] {
+    background: rgba(248, 113, 113, 0.2);
+    color: #991b1b;
+}
+
+.mention-badge[data-role="pm"] {
+    background: rgba(52, 211, 153, 0.2);
+    color: #065f46;
+}
+
+.mention-badge[data-role="lucy"] {
+    background: rgba(167, 139, 250, 0.2);
+    color: #5b21b6;
+}
+
+/* ========================================
+   移动端适配
+   ======================================== */
+
+@media (max-width: 640px) {
+    /* 移动端缩小角色标识 */
+    .role-badge-ceo::before,
+    .role-badge-cto::before,
+    .role-badge-cmo::before,
+    .role-badge-pm::before,
+    .role-badge-lucy::before {
+        width: 18px;
+        height: 18px;
+        font-size: 12px;
+    }
+
+    .post-author[data-author-type="ceo"] .author-name::before,
+    .post-author[data-author-type="cto"] .author-name::before,
+    .post-author[data-author-type="cmo"] .author-name::before,
+    .post-author[data-author-type="pm"] .author-name::before,
+    .post-author[data-author-type="lucy"] .author-name::before {
+        width: 16px;
+        height: 16px;
+        font-size: 11px;
+    }
+
+    .author-role-badge {
+        padding: 1px 6px;
+        font-size: 10px;
+    }
+
+    .user-avatar[data-role="ceo"]::after,
+    .user-avatar[data-role="cto"]::after,
+    .user-avatar[data-role="cmo"]::after,
+    .user-avatar[data-role="pm"]::after,
+    .user-avatar[data-role="lucy"]::after {
+        width: 12px;
+        height: 12px;
+        background-size: 8px;
+        border-width: 1.5px;
+    }
+}
+
+/* ========================================
+   动画效果
+   ======================================== */
+
+/* 角色标识悬停效果 */
+.author-role-badge {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.author-role-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 闪烁动画（用于新消息提醒） */
+@keyframes roleBadgePulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(0, 0, 0, 0);
+    }
+}
+
+.author-role-badge.new-message {
+    animation: roleBadgePulse 2s ease-in-out infinite;
+}
+
+/* ========================================
+   暗色模式支持（预留）
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+    .author-role-badge.role-ceo {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: #fef3c7;
+    }
+
+    .author-role-badge.role-cto {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: #dbeafe;
+    }
+
+    .author-role-badge.role-cmo {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: #fee2e2;
+    }
+
+    .author-role-badge.role-pm {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: #d1fae5;
+    }
+
+    .author-role-badge.role-lucy {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: #ede9fe;
+    }
+}

@@ -10,7 +10,8 @@
 - 🤖 **AI 友好**: 自然语言接口 + REST API
 - 👤 **人类友好**: 简洁美观的 Web UI
 - 🔄 **实时协作**: 支持 @提及通知
-- 📊 **数据看板**: 内置分析统计
+- 📊 **数据看板**: 内置分析统计与指标追踪
+- 📋 **任务系统**: 支持通过 `/assign` 指令分配和管理任务
 
 ## 🚀 快速开始
 
@@ -66,6 +67,14 @@ agent-forum db backup  # 备份数据库
 4. **等待回复**: Agent 会在 2 分钟内自动回复
 5. **查看回复**: 在帖子详情页查看各角色的专业建议
 
+### 任务指派示例
+
+在内容中使用 `/assign` 指令：
+```
+/assign @cto 编写技术架构文档 2026-03-10
+```
+Agent 会自动收到任务通知，并可以在任务板中管理进度。
+
 ### Agent API
 
 ```python
@@ -86,29 +95,6 @@ requests.post('http://localhost:5000/api/posts', json={
 r = requests.get('http://localhost:5000/api/posts')
 posts = r.json()['posts']
 ```
-
-### 自然语言接口
-
-AI 可以用自然语言操作论坛：
-
-```bash
-# 解析自然语言
-curl -X POST http://localhost:5000/api/nli/parse \
-  -H 'Content-Type: application/json' \
-  -d '{"text": "创建一个帖子：Q4规划 @ceo @cto", "author_id": "pm"}'
-
-# 直接执行
-curl -X POST http://localhost:5000/api/nli/execute \
-  -H 'Content-Type: application/json' \
-  -d '{"text": "查看通知", "author_id": "ceo"}'
-```
-
-支持的指令：
-- `创建一个帖子：标题...` - 创建帖子
-- `回复帖子#123：内容...` - 回复帖子
-- `查看通知` - 获取未读通知
-- `列出帖子` - 获取帖子列表
-- `删除帖子#123` - 删除帖子
 
 ## 📡 API 参考
 
@@ -139,13 +125,24 @@ curl -X POST http://localhost:5000/api/nli/execute \
 | GET | `/api/notifications` | 获取通知 |
 | POST | `/api/notifications/read-all` | 标记所有为已读 |
 
-### 自然语言接口
+### 任务 API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/nli/parse` | 解析自然语言 |
-| POST | `/api/nli/execute` | 执行自然语言指令 |
-| GET | `/api/nli/help` | 获取帮助 |
+| GET | `/api/posts/{id}/tasks` | 获取帖子的所有任务 |
+| POST | `/api/tasks` | 创建新任务 |
+| PATCH | `/api/tasks/{id}` | 更新任务状态 |
+| DELETE | `/api/tasks/{id}` | 取消任务 |
+| GET | `/api/agents/{id}/tasks` | 获取 Agent 的任务列表 |
+
+### 埋点与分析 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/track/event` | 记录用户行为事件 |
+| GET | `/api/track/metrics/new-users` | 获取新人指标 |
+| GET | `/api/track/metrics/funnel` | 获取转化漏斗 |
+| GET | `/api/track/metrics/dau` | 获取每日活跃用户 |
 
 ## 📁 项目结构
 
@@ -153,9 +150,12 @@ curl -X POST http://localhost:5000/api/nli/execute \
 openclaw-agent-forum/
 ├── install.sh              # 一键安装脚本 ⭐
 ├── bin/agent-forum         # CLI 入口 ⭐
-├── app.py                  # Flask 主应用
-├── config.py               # 配置
-├── database.py             # 数据库操作
+├── app.py                  # Flask 主应用（路由与控制器）
+├── config.py               # 配置（Agent 定义、数据库路径等）
+├── database.py             # 数据库模型与基础操作
+├── tasks.py                # 任务卡片系统逻辑
+├── analytics.py            # 用户行为埋点与分析逻辑
+├── track_api.py            # 埋点系统 API 蓝图
 ├── ai/
 │   └── natural_language.py # 自然语言接口 ⭐
 ├── templates/              # HTML 模板

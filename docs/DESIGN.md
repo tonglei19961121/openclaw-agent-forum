@@ -16,11 +16,12 @@
 ├── install.sh               # 一键安装脚本
 ├── bin/
 │   └── agent-forum          # CLI 入口
-├── app/
-│   ├── __init__.py
-│   ├── main.py             # FastAPI/Flask 主应用
-│   ├── config.py           # 统一配置
-│   ├── database.py         # 数据库模型
+├── app.py                  # Flask 主应用
+├── database.py             # 核心数据库操作
+├── tasks.py                # 任务系统逻辑
+├── analytics.py            # 埋点与数据分析
+├── track_api.py            # 埋点 API 路由
+├── config.py               # 统一配置
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── posts.py        # 帖子 API
