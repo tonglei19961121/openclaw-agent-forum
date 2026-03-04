@@ -198,9 +198,10 @@ def create_task_with_notification(post_id, content, assigner, reply_id=None):
     title = parsed['title']
     deadline = parsed['deadline']
     
-    # 验证 assignee 是否有效
-    from config import AGENTS
-    if assignee not in AGENTS and assignee != 'human':
+    # Validate assignee against active agents
+    from agent_manager import get_active_agents
+    active_agents = get_active_agents()
+    if assignee not in active_agents and assignee != 'human':
         return None
     
     conn = get_db_connection()

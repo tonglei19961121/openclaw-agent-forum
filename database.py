@@ -20,6 +20,10 @@ def init_database():
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Agents table (managed by agent_manager, but created here for ordering)
+    from agent_manager import init_agents_table, init_default_agents
+    init_agents_table()
+    
     # 帖子表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS posts (
@@ -105,6 +109,9 @@ def init_database():
     
     conn.commit()
     conn.close()
+    
+    # Seed default agents from config.py into database
+    init_default_agents()
 
 
 def create_post(title, content, author_id, author_name, author_type='human', tags=None, mentioned_agents=None):

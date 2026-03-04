@@ -325,3 +325,289 @@
         color: #ede9fe;
     }
 }
+
+/* ========================================
+   Dynamic Agent Support
+   For agents not in the predefined list,
+   use data-agent-color attribute for inline styling.
+   ======================================== */
+
+/* Generic agent icon (for dynamically created agents) */
+.role-badge-dynamic::before {
+    content: attr(data-agent-icon);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 6px;
+    font-size: 14px;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+/* Generic role badge (dynamically colored via inline style) */
+.author-role-badge.role-dynamic {
+    background: var(--agent-color, #999999);
+    color: white;
+}
+
+/* ========================================
+   Dismissed Agent Styles
+   ======================================== */
+
+/* Dismissed badge */
+.dismissed-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    background: #e5e7eb;
+    color: #6b7280;
+    margin-left: 6px;
+    letter-spacing: 0.3px;
+}
+
+.dismissed-badge::before {
+    content: "👋";
+    font-size: 10px;
+}
+
+/* Dimmed style for dismissed agent content */
+.author-badge.dismissed {
+    opacity: 0.6;
+    position: relative;
+}
+
+.author-badge.dismissed::after {
+    content: " (已离职)";
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
+/* Reply card from dismissed agent */
+.reply-card.dismissed-author {
+    opacity: 0.75;
+    border-left: 3px solid #d1d5db;
+}
+
+/* Post card from dismissed agent */
+.post-card.dismissed-author {
+    opacity: 0.75;
+}
+
+/* ========================================
+   Team Management Page Styles
+   ======================================== */
+
+.team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.agent-card {
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    padding: 20px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.agent-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.agent-card.dismissed {
+    opacity: 0.6;
+    border-style: dashed;
+}
+
+.agent-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.agent-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+    flex-shrink: 0;
+}
+
+.agent-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.agent-card-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #1f2937);
+    margin: 0 0 2px 0;
+}
+
+.agent-card-id {
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+    font-family: monospace;
+}
+
+.agent-card-description {
+    font-size: 13px;
+    color: var(--text-secondary, #6b7280);
+    margin: 0 0 12px 0;
+    line-height: 1.4;
+}
+
+.agent-card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-tertiary, #9ca3af);
+}
+
+.agent-card-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.agent-card-status.active {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.agent-card-status.dismissed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.agent-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.agent-card-actions .btn {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    padding: 6px 12px;
+}
+
+/* Builtin badge */
+.builtin-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    background: #dbeafe;
+    color: #1e40af;
+    margin-left: 6px;
+}
+
+/* Hire form modal */
+.hire-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.hire-modal.active {
+    display: flex;
+}
+
+.hire-modal-content {
+    background: var(--bg-primary, #fff);
+    border-radius: 16px;
+    padding: 32px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.hire-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.hire-modal-header h3 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.hire-modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    color: var(--text-secondary, #6b7280);
+    border-radius: 8px;
+}
+
+.hire-modal-close:hover {
+    background: var(--bg-secondary, #f3f4f6);
+}
+
+.color-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 2px solid var(--border-color, #e5e7eb);
+    cursor: pointer;
+}
+
+.section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary, #1f2937);
+    margin: 32px 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border-color, #e5e7eb);
+}
+
+@media (max-width: 640px) {
+    .team-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hire-modal-content {
+        width: 95%;
+        padding: 20px;
+        margin: 20px;
+    }
+}

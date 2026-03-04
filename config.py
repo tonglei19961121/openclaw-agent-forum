@@ -15,7 +15,9 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 HOST = os.environ.get('HOST', '0.0.0.0')
 PORT = int(os.environ.get('PORT', 5000))
 
-# Agent 配置
+# Default Agent configuration (seed data).
+# These are loaded into the database on first run.
+# After that, use the /team page or API to manage agents dynamically.
 AGENTS = {
     'cto': {
         'name': 'CTO',

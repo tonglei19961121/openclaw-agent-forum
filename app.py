@@ -8,7 +8,11 @@ import os
 import sys
 from datetime import datetime
 
-from config import AGENTS, HUMAN_USER, HOST, PORT, DEBUG, SECRET_KEY
+from config import HUMAN_USER, HOST, PORT, DEBUG, SECRET_KEY
+from agent_manager import (
+    get_active_agents, get_all_agents, get_agent,
+    hire_agent, dismiss_agent, rehire_agent, update_agent
+)
 from database import (
     delete_post, can_delete_post, restore_post, get_deleted_posts,
     delete_reply, can_delete_reply, restore_reply,
@@ -56,6 +60,10 @@ def index():
     posts = get_posts(limit=per_page, offset=offset)
     total = get_post_count()
     
+    # Get dynamic agents (include dismissed for historical display)
+    agents = get_active_agents()
+    all_agents = get_all_agents(include_dismissed=True)
+    
     # 为每个帖子添加回复数
     for post in posts:
         post['reply_count'] = get_reply_count(post['id'])
@@ -65,7 +73,8 @@ def index():
                          page=page, 
                          total=total,
                          per_page=per_page,
-                         agents=AGENTS,
+                         agents=agents,
+                         all_agents=all_agents,
                          human=HUMAN_USER)
 
 
@@ -81,10 +90,15 @@ def view_post(post_id):
     
     replies = get_replies(post_id)
     
+    # Get dynamic agents (include dismissed for historical display)
+    agents = get_active_agents()
+    all_agents = get_all_agents(include_dismissed=True)
+    
     return render_template('post.html',
                          post=post,
                          replies=replies,
-                         agents=AGENTS,
+                         agents=agents,
+                         all_agents=all_agents,
                          human=HUMAN_USER)
 
 
@@ -103,12 +117,13 @@ def new_post():
         mentioned_agents = parse_mentions(content)
         
         # 确定作者信息
+        agents = get_active_agents()
         if author_type == 'chairman':
             author_id = HUMAN_USER['id']
             author_name = HUMAN_USER['name']
         else:
             author_id = author_type  # agent_id
-            author_name = AGENTS.get(author_type, {}).get('name', author_type)
+            author_name = agents.get(author_type, {}).get('name', author_type)
         
         post_id = create_post(
             title=title,
@@ -127,7 +142,7 @@ def new_post():
             })
         return jsonify({'success': True, 'post_id': post_id})
     
-    return render_template('new_post.html', agents=AGENTS, human=HUMAN_USER)
+    return render_template('new_post.html', agents=get_active_agents(), human=HUMAN_USER)
 
 
 @app.route('/post/<int:post_id>/reply', methods=['POST'])
@@ -143,12 +158,13 @@ def reply_post(post_id):
     mentioned_agents = parse_mentions(content)
     
     # 确定作者信息
+    agents = get_active_agents()
     if author_type == 'chairman':
         author_id = HUMAN_USER['id']
         author_name = HUMAN_USER['name']
     else:
         author_id = author_type
-        author_name = AGENTS.get(author_type, {}).get('name', author_type)
+        author_name = agents.get(author_type, {}).get('name', author_type)
     
     reply_id = create_reply(
         post_id=post_id,
@@ -191,7 +207,7 @@ def notifications():
                          notifications=notifs,
                          unread_count=unread_count,
                          recipient_id=recipient_id,
-                         agents=AGENTS,
+                         agents=get_active_agents(),
                          human=HUMAN_USER)
 
 
@@ -330,14 +346,21 @@ def api_create_post():
         return jsonify({'error': '标题和内容不能为空'}), 400
     
     # 确定作者信息
+    agents = get_active_agents()
     if author_id == 'human':
         author_name = HUMAN_USER['name']
         author_type = 'human'
-    elif author_id in AGENTS:
-        author_name = AGENTS[author_id]['name']
+    elif author_id in agents:
+        author_name = agents[author_id]['name']
         author_type = author_id
     else:
-        return jsonify({'error': '无效的 author_id'}), 400
+        # Also check dismissed agents (they can still be referenced)
+        all_agents = get_all_agents(include_dismissed=True)
+        if author_id in all_agents:
+            author_name = all_agents[author_id]['name']
+            author_type = author_id
+        else:
+            return jsonify({'error': '无效的 author_id'}), 400
     
     # 解析 @mentions
     mentioned_agents = parse_mentions(content)
@@ -366,14 +389,20 @@ def api_create_reply(post_id):
         return jsonify({'error': '回复内容不能为空'}), 400
     
     # 确定作者信息
+    agents = get_active_agents()
     if author_id == 'human':
         author_name = HUMAN_USER['name']
         author_type = 'human'
-    elif author_id in AGENTS:
-        author_name = AGENTS[author_id]['name']
+    elif author_id in agents:
+        author_name = agents[author_id]['name']
         author_type = author_id
     else:
-        return jsonify({'error': '无效的 author_id'}), 400
+        all_agents = get_all_agents(include_dismissed=True)
+        if author_id in all_agents:
+            author_name = all_agents[author_id]['name']
+            author_type = author_id
+        else:
+            return jsonify({'error': '无效的 author_id'}), 400
     
     # 解析 @mentions
     mentioned_agents = parse_mentions(content)
@@ -388,7 +417,7 @@ def api_create_reply(post_id):
     )
     
     # Agent 回复后自动标记该帖子的通知为已读
-    if author_id in AGENTS:
+    if author_id in agents:
         from database import mark_notifications_read_by_post
         marked_count = mark_notifications_read_by_post(author_id, post_id)
         if marked_count > 0:
@@ -414,11 +443,121 @@ def api_notifications():
 
 @app.route('/api/agents')
 def api_agents():
-    """获取 Agent 列表"""
+    """Get agent list. Use ?include_dismissed=true to include dismissed agents."""
+    include_dismissed = request.args.get('include_dismissed', 'false').lower() == 'true'
+    if include_dismissed:
+        agents = get_all_agents(include_dismissed=True)
+    else:
+        agents = get_active_agents()
     return jsonify({
-        'agents': AGENTS,
+        'agents': agents,
         'human': HUMAN_USER
     })
+
+
+@app.route('/api/agents/<agent_id>')
+def api_agent_detail(agent_id):
+    """Get single agent detail"""
+    agent = get_agent(agent_id)
+    if not agent:
+        return jsonify({'error': f'Agent "{agent_id}" not found'}), 404
+    return jsonify({'agent': agent})
+
+
+@app.route('/api/agents', methods=['POST'])
+def api_hire_agent():
+    """Hire a new agent. Only chairman and ceo can hire."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+    
+    operator = data.get('operator', 'chairman')
+    if operator not in ['chairman', 'ceo']:
+        return jsonify({'error': 'Only chairman or CEO can hire agents'}), 403
+    
+    agent_id = data.get('agent_id', '').lower().strip()
+    name = data.get('name', '').strip()
+    
+    if not agent_id or not name:
+        return jsonify({'error': 'agent_id and name are required'}), 400
+    
+    result = hire_agent(
+        agent_id=agent_id,
+        name=name,
+        description=data.get('description', ''),
+        color=data.get('color', '#999999'),
+        icon=data.get('icon', '🤖'),
+        webhook=data.get('webhook'),
+        soul_md=data.get('soul_md'),
+        agents_md=data.get('agents_md'),
+    )
+    
+    if 'error' in result:
+        return jsonify(result), 400
+    
+    return jsonify(result), 201
+
+
+@app.route('/api/agents/<agent_id>', methods=['DELETE'])
+def api_dismiss_agent(agent_id):
+    """Dismiss an agent. Only chairman and ceo can dismiss."""
+    data = request.get_json() or {}
+    operator = data.get('operator', 'chairman')
+    
+    if operator not in ['chairman', 'ceo']:
+        return jsonify({'error': 'Only chairman or CEO can dismiss agents'}), 403
+    
+    result = dismiss_agent(agent_id, dismissed_by=operator)
+    
+    if 'error' in result:
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/agents/<agent_id>/rehire', methods=['POST'])
+def api_rehire_agent(agent_id):
+    """Rehire a dismissed agent. Only chairman and ceo can rehire."""
+    data = request.get_json() or {}
+    operator = data.get('operator', 'chairman')
+    
+    if operator not in ['chairman', 'ceo']:
+        return jsonify({'error': 'Only chairman or CEO can rehire agents'}), 403
+    
+    result = rehire_agent(
+        agent_id=agent_id,
+        name=data.get('name'),
+        description=data.get('description'),
+        color=data.get('color'),
+        icon=data.get('icon'),
+        soul_md=data.get('soul_md'),
+        agents_md=data.get('agents_md'),
+    )
+    
+    if 'error' in result:
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/agents/<agent_id>', methods=['PATCH'])
+def api_update_agent(agent_id):
+    """Update agent info. Only chairman and ceo can update."""
+    data = request.get_json() or {}
+    operator = data.get('operator', 'chairman')
+    
+    if operator not in ['chairman', 'ceo']:
+        return jsonify({'error': 'Only chairman or CEO can update agents'}), 403
+    
+    # Remove operator from update data
+    update_data = {k: v for k, v in data.items() if k != 'operator'}
+    
+    result = update_agent(agent_id, **update_data)
+    
+    if 'error' in result:
+        return jsonify(result), 400
+    
+    return jsonify(result)
 
 
 # ============== 健康检查 ==============
@@ -692,11 +831,12 @@ def api_reply_with_task(post_id):
         return jsonify({'error': '回复内容不能为空'}), 400
     
     # 确定作者信息
+    agents = get_active_agents()
     if author_id == 'human':
         author_name = HUMAN_USER['name']
         author_type = 'human'
-    elif author_id in AGENTS:
-        author_name = AGENTS[author_id]['name']
+    elif author_id in agents:
+        author_name = agents[author_id]['name']
         author_type = author_id
     else:
         return jsonify({'error': '无效的 author_id'}), 400
@@ -725,6 +865,18 @@ def api_reply_with_task(post_id):
 def analytics_dashboard():
     """数据看板页面"""
     return render_template("analytics_dashboard.html")
+
+
+@app.route("/team")
+def team_page():
+    """Team management page - hire, dismiss, rehire agents"""
+    agents = get_active_agents()
+    all_agents = get_all_agents(include_dismissed=True)
+    dismissed_agents = {k: v for k, v in all_agents.items() if v['status'] == 'dismissed'}
+    return render_template("team.html",
+                         agents=agents,
+                         dismissed_agents=dismissed_agents,
+                         human=HUMAN_USER)
 
 
 if __name__ == '__main__':
