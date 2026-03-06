@@ -50,6 +50,7 @@ def init_agents_table():
 def init_default_agents():
     """Seed default agents from config.py into database (idempotent).
     Also reads SOUL.md / AGENTS.md from filesystem if available.
+    Registers each agent with OpenClaw via CLI.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -85,6 +86,10 @@ def init_default_agents():
             soul_md,
             agents_md
         ))
+
+        # Register agent with OpenClaw and setup cron
+        _setup_openclaw_agent(agent_id, agent_info['name'], soul_md, agents_md)
+        _setup_openclaw_cron(agent_id, agent_info['name'], agent_info.get('description', ''))
 
     conn.commit()
     conn.close()
@@ -253,8 +258,8 @@ def hire_agent(agent_id, name, description, color='#999999', icon='🤖',
         with open(context_path, 'w', encoding='utf-8') as f:
             f.write(f'# {name} Context\n\nNo context yet.\n')
 
-    # Setup OpenClaw workspace and cron
-    _setup_openclaw_workspace(agent_id, name, soul_md, agents_md)
+    # Register agent with OpenClaw and setup cron
+    _setup_openclaw_agent(agent_id, name, soul_md, agents_md)
     _setup_openclaw_cron(agent_id, name, description)
 
     return {
@@ -302,8 +307,9 @@ def dismiss_agent(agent_id, dismissed_by='chairman'):
     conn.commit()
     conn.close()
 
-    # Remove OpenClaw cron
+    # Remove OpenClaw cron and agent
     _remove_openclaw_cron(agent_id)
+    _remove_openclaw_agent(agent_id)
 
     return {
         'success': True,
@@ -368,10 +374,10 @@ def rehire_agent(agent_id, name=None, description=None, color=None,
     if agents_md:
         _write_agent_file(base_dir, agent_id, 'AGENTS.md', agents_md)
 
-    # Re-setup OpenClaw
+    # Re-setup OpenClaw agent and cron
     agent = get_agent(agent_id)
     if agent:
-        _setup_openclaw_workspace(agent_id, agent['name'], agent.get('soul_md'), agent.get('agents_md'))
+        _setup_openclaw_agent(agent_id, agent['name'], agent.get('soul_md'), agent.get('agents_md'))
         _setup_openclaw_cron(agent_id, agent['name'], agent.get('description', ''))
 
     return {
@@ -423,7 +429,7 @@ def update_agent(agent_id, **kwargs):
 # ============== OpenClaw Integration ==============
 
 def _setup_openclaw_workspace(agent_id, name, soul_md=None, agents_md=None):
-    """Create OpenClaw workspace for the agent"""
+    """Create OpenClaw workspace directory and write SOUL.md / AGENTS.md"""
     workspace_dir = os.path.expanduser(f'~/.openclaw/workspace-{agent_id}')
     try:
         os.makedirs(workspace_dir, exist_ok=True)
@@ -441,6 +447,70 @@ def _setup_openclaw_workspace(agent_id, name, soul_md=None, agents_md=None):
         print(f"[AgentManager] Warning: Failed to create workspace for {agent_id}: {e}")
 
 
+def _setup_openclaw_agent(agent_id, name, soul_md=None, agents_md=None):
+    """Register an agent with OpenClaw via CLI (agents add) and prepare workspace.
+    Skips if the agent already exists in OpenClaw.
+    """
+    # First create workspace directory with SOUL.md / AGENTS.md
+    _setup_openclaw_workspace(agent_id, name, soul_md, agents_md)
+
+    workspace_dir = os.path.expanduser(f'~/.openclaw/workspace-{agent_id}')
+
+    # Check if agent already exists in OpenClaw
+    try:
+        result = subprocess.run(
+            ['openclaw', 'agents', 'list', '--json'],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            try:
+                agents_list = json.loads(result.stdout)
+                for agent in agents_list:
+                    if agent.get('id', '').lower() == agent_id.lower():
+                        print(f"[AgentManager] Agent {agent_id} already exists in OpenClaw, skipping add")
+                        return
+            except json.JSONDecodeError:
+                pass
+    except (FileNotFoundError, Exception):
+        pass
+
+    # Register agent via CLI
+    add_cmd = [
+        'openclaw', 'agents', 'add',
+        '--name', agent_id,
+        '--workspace', workspace_dir,
+        '--non-interactive'
+    ]
+
+    try:
+        result = subprocess.run(add_cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            print(f"[AgentManager] Agent {agent_id} registered with OpenClaw")
+        else:
+            print(f"[AgentManager] Warning: openclaw agents add failed for {agent_id}: {result.stderr}")
+    except FileNotFoundError:
+        print(f"[AgentManager] Warning: openclaw CLI not found, skipping agent registration for {agent_id}")
+    except Exception as e:
+        print(f"[AgentManager] Warning: Agent registration error for {agent_id}: {e}")
+
+
+def _remove_openclaw_agent(agent_id):
+    """Remove an agent from OpenClaw via CLI (agents delete --force)"""
+    try:
+        result = subprocess.run(
+            ['openclaw', 'agents', 'delete', agent_id, '--force'],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            print(f"[AgentManager] Agent {agent_id} removed from OpenClaw")
+        else:
+            print(f"[AgentManager] Warning: openclaw agents delete failed for {agent_id}: {result.stderr}")
+    except FileNotFoundError:
+        print(f"[AgentManager] Warning: openclaw CLI not found, skipping agent removal for {agent_id}")
+    except Exception as e:
+        print(f"[AgentManager] Warning: Agent removal error for {agent_id}: {e}")
+
+
 def _setup_openclaw_cron(agent_id, name, description):
     """Configure OpenClaw cron job for the agent"""
     cron_message = (
@@ -454,7 +524,7 @@ def _setup_openclaw_cron(agent_id, name, description):
         '--session', 'isolated',
         '--message', cron_message,
         '--agent', agent_id,
-        '--delivery', 'none',
+        '--deliver', 'none',
         '--exact'
     ]
 
@@ -482,12 +552,16 @@ def _remove_openclaw_cron(agent_id):
             try:
                 cron_jobs = json.loads(result.stdout)
                 for job in cron_jobs:
-                    if agent_id in job.get('name', '').lower() or agent_id in job.get('agent', '').lower():
-                        subprocess.run(
-                            ['openclaw', 'cron', 'remove', '--name', job['name']],
-                            capture_output=True, text=True, timeout=30
-                        )
-                        print(f"[AgentManager] Cron job removed for {agent_id}")
+                    job_name = job.get('name', '').lower()
+                    job_agent = job.get('agentId', job.get('agent', '')).lower()
+                    if agent_id in job_name or agent_id == job_agent:
+                        job_id = job.get('id', job.get('jobId', ''))
+                        if job_id:
+                            subprocess.run(
+                                ['openclaw', 'cron', 'remove', job_id],
+                                capture_output=True, text=True, timeout=30
+                            )
+                            print(f"[AgentManager] Cron job '{job_id}' removed for {agent_id}")
             except json.JSONDecodeError:
                 print(f"[AgentManager] Warning: Could not parse cron list for {agent_id}")
     except FileNotFoundError:

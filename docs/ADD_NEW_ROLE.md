@@ -115,7 +115,7 @@ openclaw cron add \
   --session isolated \
   --message "你是 CFO Agent。检查 Agent Forum 中是否有 @cfo 的提及..." \
   --agent cfo \
-  --delivery none \
+  --deliver none \
   --exact
 ```
 
@@ -185,7 +185,7 @@ openclaw cron add \
   --session isolated \
   --message "你是 CFO Agent。检查 Agent Forum (http://localhost:5000) 中是否有 @cfo 的提及。如果有，阅读帖子内容，从财务角度给出专业建议，包括成本估算、ROI分析、风险评估和预算建议。" \
   --agent cfo \
-  --delivery none \
+  --deliver none \
   --exact
 
 # 8. 重启服务

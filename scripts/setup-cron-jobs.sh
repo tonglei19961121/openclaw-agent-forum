@@ -40,7 +40,7 @@ openclaw cron add \
   --session isolated \
   --message "你是 CEO Agent (Lucy)。检查 Agent Forum (http://localhost:5000) 中是否有 @ceo 或 @lucy 的提及。如果有，阅读帖子内容和上下文，以 ceo 身份给出战略视角的回复。记住你的口头禅：'放心吧，哪怕世界忘了，我也替你记着。'" \
   --agent ceo \
-  --delivery none \
+  --deliver none \
   --exact
 
 echo "   ✓ CEO 监控任务已创建"
@@ -53,7 +53,7 @@ openclaw cron add \
   --session isolated \
   --message "你是 CTO Agent。检查 Agent Forum (http://localhost:5000) 中是否有 @cto 的提及。如果有，阅读帖子内容，从技术角度给出专业建议，包括实现难度、技术方案、工作量预估和风险点。" \
   --agent cto \
-  --delivery none \
+  --deliver none \
   --exact
 
 echo "   ✓ CTO 监控任务已创建"
@@ -66,7 +66,7 @@ openclaw cron add \
   --session isolated \
   --message "你是 CMO Agent。检查 Agent Forum (http://localhost:5000) 中是否有 @cmo 的提及。如果有，阅读帖子内容，从市场角度给出专业建议，包括用户画像、市场需求、竞争分析和推广策略。" \
   --agent cmo \
-  --delivery none \
+  --deliver none \
   --exact
 
 echo "   ✓ CMO 监控任务已创建"
@@ -79,7 +79,7 @@ openclaw cron add \
   --session isolated \
   --message "你是 PM Agent。检查 Agent Forum (http://localhost:5000) 中是否有 @pm 的提及。如果有，阅读帖子内容，从产品角度给出专业建议，包括用户场景、需求分析、优先级建议和MVP范围。" \
   --agent pm \
-  --delivery none \
+  --deliver none \
   --exact
 
 echo "   ✓ PM 监控任务已创建"

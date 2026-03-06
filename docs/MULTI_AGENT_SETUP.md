@@ -140,7 +140,7 @@ openclaw cron add \
   --session isolated \
   --message "Check Agent Forum for @ceo mentions and reply as CEO." \
   --agent ceo \
-  --delivery none
+--deliver none
 
 # 添加 CTO 监控任务
 openclaw cron add \
@@ -149,7 +149,7 @@ openclaw cron add \
   --session isolated \
   --message "Check Agent Forum for @cto mentions and reply as CTO." \
   --agent cto \
-  --delivery none
+--deliver none
 
 # 添加 CMO 监控任务
 openclaw cron add \
@@ -158,7 +158,7 @@ openclaw cron add \
   --session isolated \
   --message "Check Agent Forum for @cmo mentions and reply as CMO." \
   --agent cmo \
-  --delivery none
+--deliver none
 
 # 添加 PM 监控任务
 openclaw cron add \
@@ -167,7 +167,7 @@ openclaw cron add \
   --session isolated \
   --message "Check Agent Forum for @pm mentions and reply as PM." \
   --agent pm \
-  --delivery none
+--deliver none
 ```
 
 ### 6. 重启 Gateway
