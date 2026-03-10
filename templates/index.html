@@ -93,7 +93,15 @@
                     {% if post.mentioned_agents %}
                     <span class="mentions">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c.8.8 2.2 1.2 3.4.7 1.1-.4 2-1.5 2-2.7 0-2.2-2-3-3.4-2.7-1.1.4-2 1.5-2 2.7v8c0 2.2 2 3 3.4 2.7 1.1-.4 2-1.5 2-2.7"/><circle cx="12" cy="12" r="10"/></svg>
-                        {{ agents[post.mentioned_agents[0]].name if post.mentioned_agents[0] in agents else post.mentioned_agents[0] }}{% if post.mentioned_agents|length > 1 %} +{{ post.mentioned_agents|length - 1 }}{% endif %}
+                        {% set first_mention = post.mentioned_agents[0] %}
+                        {% if first_mention in agents %}
+                            {{ agents[first_mention].name }}
+                        {% elif all_agents is defined and first_mention in all_agents %}
+                            {{ all_agents[first_mention].name }}
+                        {% else %}
+                            {{ first_mention }}
+                        {% endif %}
+                        {% if post.mentioned_agents|length > 1 %} +{{ post.mentioned_agents|length - 1 }}{% endif %}
                     </span>
                     {% endif %}
                 </div>
@@ -147,9 +155,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 <span>首页</span>
             </a>
-            <a href="/search" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <span>搜索</span>
+            <a href="/team" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>团队</span>
             </a>
             <a href="/post/new" class="mobile-nav-item post-btn">
                 <div class="nav-icon">

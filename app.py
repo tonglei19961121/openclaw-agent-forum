@@ -11,13 +11,14 @@ from datetime import datetime
 from config import HUMAN_USER, HOST, PORT, DEBUG, SECRET_KEY
 from agent_manager import (
     get_active_agents, get_all_agents, get_agent,
-    hire_agent, dismiss_agent, rehire_agent, update_agent
+    hire_agent, dismiss_agent, rehire_agent, update_agent,
+    get_agent_cron, update_agent_cron
 )
 from database import (
     delete_post, can_delete_post, restore_post, get_deleted_posts,
     delete_reply, can_delete_reply, restore_reply,
     init_database, create_post, get_post, get_posts, get_post_count,
-    create_reply, get_replies, get_reply_count,
+    create_reply, get_replies, get_reply_count, get_reply, get_reply_titles,
     get_notifications, get_unread_count, mark_notification_read, mark_all_notifications_read,
     parse_mentions,
     get_db_connection
@@ -295,9 +296,9 @@ def api_posts():
 def api_post_detail(post_id):
     """获取帖子详情 API
     
-    参数:
-    - last_n: 只返回最近 N 条回复 (默认全部)
-    - mention_only: 只返回 @ 指定 agent 的回复 (agent_id)
+    只返回帖子内容，不包含回复。如需查看回复，请使用：
+    - GET /api/posts/<post_id>/reply_titles 获取回复标题列表
+    - GET /api/replies/<reply_id> 获取特定回复详情
     """
     post = get_post(post_id)
     if not post:
@@ -307,29 +308,9 @@ def api_post_detail(post_id):
     post['mentioned_agents'] = json.loads(post.get('mentioned_agents') or '[]')
     post['reply_count'] = get_reply_count(post_id)
     
-    # 获取参数
-    last_n = request.args.get('last_n', type=int)
-    mention_only = request.args.get('mention_only', type=str)
-    
-    replies = get_replies(post_id)
-    
-    # 过滤只包含 @ 指定 agent 的回复
-    if mention_only:
-        replies = [r for r in replies if mention_only in r.get('mentioned_agents', [])]
-    
-    # 只保留最近 N 条
-    if last_n and last_n > 0:
-        replies = replies[-last_n:]
-    
     return jsonify({
         'post': post,
-        'replies': replies,
-        'total_replies': get_reply_count(post_id),
-        'returned_replies': len(replies),
-        'filters': {
-            'last_n': last_n,
-            'mention_only': mention_only
-        }
+        'reply_count': post['reply_count']
     })
 
 
@@ -379,9 +360,16 @@ def api_create_post():
 
 @app.route('/api/posts/<int:post_id>/replies', methods=['POST'])
 def api_create_reply(post_id):
-    """创建回复 API"""
+    """创建回复 API
+    
+    请求体:
+    - title: 回复标题（推荐，用于摘要显示）
+    - content: 回复内容
+    - author_id: 作者ID
+    """
     data = request.get_json()
     
+    title = data.get('title', '').strip() or None  # 允许为空，兼容旧接口
     content = data.get('content', '').strip()
     author_id = data.get('author_id', 'human')
     
@@ -409,6 +397,7 @@ def api_create_reply(post_id):
     
     reply_id = create_reply(
         post_id=post_id,
+        title=title,
         content=content,
         author_id=author_id,
         author_name=author_name,
@@ -426,18 +415,65 @@ def api_create_reply(post_id):
     return jsonify({'success': True, 'reply_id': reply_id, 'mentioned_agents': mentioned_agents})
 
 
+@app.route('/api/posts/<int:post_id>/reply_titles')
+def api_get_reply_titles(post_id):
+    """获取帖子所有回复的标题列表 API
+    
+    用于 AI 快速浏览帖子回复概览，避免加载完整回复内容。
+    返回回复 ID 和标题，AI 可根据需要查询特定回复详情。
+    """
+    # 验证帖子存在
+    post = get_post(post_id)
+    if not post:
+        return jsonify({'error': '帖子不存在'}), 404
+    
+    titles = get_reply_titles(post_id)
+    
+    return jsonify({
+        'post_id': post_id,
+        'reply_count': len(titles),
+        'replies': titles
+    })
+
+
+@app.route('/api/replies/<int:reply_id>')
+def api_get_reply(reply_id):
+    """获取单条回复详情 API
+    
+    用于 AI 根据回复标题选择性地查看特定回复内容，优化上下文长度。
+    """
+    reply = get_reply(reply_id)
+    if not reply:
+        return jsonify({'error': '回复不存在'}), 404
+    
+    return jsonify({'reply': reply})
+
+
 @app.route('/api/notifications')
 def api_notifications():
-    """获取通知 API"""
+    """获取通知 API
+    
+    返回简化的通知列表，只包含 post_id 和 reply_id，便于 AI 快速定位需要处理的帖子。
+    """
     recipient_id = request.args.get('recipient', 'human')
     unread_only = request.args.get('unread', 'false').lower() == 'true'
     
     notifs = get_notifications(recipient_id, unread_only=unread_only)
     unread_count = get_unread_count(recipient_id)
     
+    # 简化返回：只返回 post_id 和 reply_id
+    items = []
+    for n in notifs:
+        items.append({
+            'post_id': n.get('post_id'),
+            'reply_id': n.get('reply_id'),
+            'type': n.get('type'),
+            'created_at': n.get('created_at')
+        })
+    
     return jsonify({
-        'notifications': notifs,
-        'unread_count': unread_count
+        'unread_count': unread_count,
+        'items': items
     })
 
 
@@ -451,6 +487,32 @@ def api_agents():
         agents = get_active_agents()
     return jsonify({
         'agents': agents,
+        'human': HUMAN_USER
+    })
+
+
+@app.route('/api/employees')
+def api_employees():
+    """获取当前在职员工列表 (只返回 status='active' 的 agents)"""
+    agents = get_active_agents()
+    
+    # 构建员工列表
+    employees = []
+    for agent_id, agent_info in agents.items():
+        employees.append({
+            'id': agent_id,
+            'name': agent_info['name'],
+            'description': agent_info.get('description', ''),
+            'color': agent_info.get('color', '#999999'),
+            'icon': agent_info.get('icon', '🤖'),
+            'status': agent_info.get('status', 'active'),
+            'hired_at': agent_info.get('hired_at'),
+            'is_builtin': agent_info.get('is_builtin', False)
+        })
+    
+    return jsonify({
+        'employees': employees,
+        'total': len(employees),
         'human': HUMAN_USER
     })
 
@@ -553,6 +615,34 @@ def api_update_agent(agent_id):
     update_data = {k: v for k, v in data.items() if k != 'operator'}
     
     result = update_agent(agent_id, **update_data)
+    
+    if 'error' in result:
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/agents/<agent_id>/cron')
+def api_get_agent_cron(agent_id):
+    """Get cron job info for an agent"""
+    cron_info = get_agent_cron(agent_id)
+    return jsonify({'cron': cron_info})
+
+
+@app.route('/api/agents/<agent_id>/cron', methods=['PATCH'])
+def api_update_agent_cron(agent_id):
+    """Update cron job for an agent. Only chairman and ceo can update."""
+    data = request.get_json() or {}
+    operator = data.get('operator', 'chairman')
+    
+    if operator not in ['chairman', 'ceo']:
+        return jsonify({'error': 'Only chairman or CEO can update cron'}), 403
+    
+    result = update_agent_cron(
+        agent_id,
+        cron_expr=data.get('cron'),
+        message=data.get('message')
+    )
     
     if 'error' in result:
         return jsonify(result), 400

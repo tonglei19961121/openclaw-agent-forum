@@ -44,6 +44,12 @@
                     moonIcon.style.display = 'none';
                 }
             }
+            
+            // 更新 meta theme-color
+            const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+            if (metaThemeColor) {
+                metaThemeColor.setAttribute('content', theme === 'dark' ? '#0f0f0f' : '#3b82f6');
+            }
         }
     };
 
@@ -135,12 +141,134 @@
         }
     };
 
+    // ==================== 移动端触摸优化 ====================
+    const MobileTouch = {
+        init() {
+            // 检测是否为触摸设备
+            this.isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+            
+            if (this.isTouchDevice) {
+                this.addTouchFeedback();
+                this.enablePullToRefresh();
+                this.optimizeTouchTargets();
+            }
+        },
+
+        // 添加触摸反馈
+        addTouchFeedback() {
+            document.querySelectorAll('.post-card, .btn, .mobile-nav-item, .notification-card').forEach(el => {
+                el.addEventListener('touchstart', function() {
+                    this.style.transform = 'scale(0.98)';
+                }, { passive: true });
+                
+                el.addEventListener('touchend', function() {
+                    this.style.transform = '';
+                }, { passive: true });
+                
+                el.addEventListener('touchcancel', function() {
+                    this.style.transform = '';
+                }, { passive: true });
+            });
+        },
+
+        // 下拉刷新
+        enablePullToRefresh() {
+            let startY = 0;
+            let isPulling = false;
+            const threshold = 80;
+            
+            // 只在首页启用下拉刷新
+            if (!document.body.classList.contains('home-page')) return;
+            
+            // 创建下拉指示器
+            const indicator = document.createElement('div');
+            indicator.className = 'pull-to-refresh';
+            indicator.innerHTML = '<div class="pull-to-refresh-spinner"></div>';
+            document.body.insertBefore(indicator, document.body.firstChild);
+            
+            document.addEventListener('touchstart', (e) => {
+                if (window.scrollY === 0) {
+                    startY = e.touches[0].clientY;
+                    isPulling = true;
+                }
+            }, { passive: true });
+            
+            document.addEventListener('touchmove', (e) => {
+                if (!isPulling) return;
+                
+                const currentY = e.touches[0].clientY;
+                const diff = currentY - startY;
+                
+                if (diff > 0 && diff < threshold) {
+                    indicator.style.transform = `translateY(${diff - 60}px)`;
+                    indicator.classList.add('visible');
+                }
+            }, { passive: true });
+            
+            document.addEventListener('touchend', () => {
+                if (!isPulling) return;
+                
+                const currentY = event.changedTouches[0].clientY;
+                const diff = currentY - startY;
+                
+                if (diff > threshold) {
+                    // 触发刷新
+                    location.reload();
+                } else {
+                    indicator.classList.remove('visible');
+                }
+                
+                isPulling = false;
+            }, { passive: true });
+        },
+
+        // 优化触摸目标
+        optimizeTouchTargets() {
+            // 确保所有可点击元素有足够的触摸区域
+            document.querySelectorAll('a, button, .nav-link, .agent-tag').forEach(el => {
+                const rect = el.getBoundingClientRect();
+                if (rect.height < 44) {
+                    el.style.minHeight = '44px';
+                    el.style.display = 'inline-flex';
+                    el.style.alignItems = 'center';
+                }
+            });
+        }
+    };
+
+    // ==================== 移动端导航 ====================
+    const MobileNav = {
+        init() {
+            // 高亮当前页面
+            this.highlightCurrentPage();
+        },
+
+        highlightCurrentPage() {
+            const currentPath = window.location.pathname;
+            
+            document.querySelectorAll('.mobile-nav-item').forEach(item => {
+                const href = item.getAttribute('href');
+                if (href) {
+                    const itemPath = new URL(href, window.location.origin).pathname;
+                    if (currentPath === itemPath || 
+                        (currentPath.startsWith('/post/') && itemPath === '/post/new')) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                }
+            });
+        }
+    };
+
     // ==================== 初始化 ====================
     document.addEventListener('DOMContentLoaded', () => {
         ThemeManager.init();
         ToastManager.init();
         TimeFormatter.init();
         SmoothScroll.init();
+        MobileTouch.init();
+        MobileNav.init();
 
         // 暴露全局 API
         window.App = {

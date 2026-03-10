@@ -169,12 +169,62 @@
 
     <!-- Agent Detail Modal -->
     <div class="hire-modal" id="detail-modal">
-        <div class="hire-modal-content">
+        <div class="hire-modal-content" style="max-width: 800px;">
             <div class="hire-modal-header">
                 <h3 id="detail-title">角色详情</h3>
                 <button class="hire-modal-close" onclick="closeDetailModal()">&times;</button>
             </div>
             <div id="detail-content">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="hire-modal" id="edit-modal">
+        <div class="hire-modal-content" style="max-width: 900px;">
+            <div class="hire-modal-header">
+                <h3 id="edit-title">编辑角色</h3>
+                <button class="hire-modal-close" onclick="closeEditModal()">&times;</button>
+            </div>
+            <form id="edit-form">
+                <input type="hidden" id="edit-agent-id">
+                
+                <h4 style="margin: 0 0 12px 0; color: var(--text-primary);">📝 SOUL.md (角色人设)</h4>
+                <div class="form-group">
+                    <textarea id="edit-soul-md" class="form-control" rows="12" placeholder="# SOUL.md - 角色名称&#10;&#10;## 我是谁&#10;&#10;描述角色的身份、性格、职责..."></textarea>
+                </div>
+                
+                <h4 style="margin: 16px 0 12px 0; color: var(--text-primary);">📋 AGENTS.md (工作指南)</h4>
+                <div class="form-group">
+                    <textarea id="edit-agents-md" class="form-control" rows="10" placeholder="# AGENTS.md - 工作指南&#10;&#10;## 任务目标&#10;&#10;描述工作流程..."></textarea>
+                </div>
+                
+                <h4 style="margin: 16px 0 12px 0; color: var(--text-primary);">⏰ 定时任务设置</h4>
+                <div id="edit-cron-section" style="background: var(--bg-secondary, #f3f4f6); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label for="edit-cron-expr">Cron 表达式</label>
+                            <input type="text" id="edit-cron-expr" class="form-control" placeholder="*/2 * * * *" style="font-family: monospace;">
+                            <small style="color: var(--text-secondary);">格式: 分 时 日 月 周 (如: */2 * * * * 表示每2分钟)</small>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label>当前状态</label>
+                            <div id="edit-cron-status" style="padding: 8px 0; color: var(--text-secondary);">-</div>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 12px; margin-bottom: 0;">
+                        <label for="edit-cron-message">定时任务消息</label>
+                        <textarea id="edit-cron-message" class="form-control" rows="4" placeholder="定时任务触发时发送给 Agent 的消息..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-ghost" onclick="closeEditModal()">取消</button>
+                    <button type="submit" class="btn btn-primary btn-large" id="edit-submit-btn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        保存更改
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -199,6 +249,13 @@
             document.getElementById('detail-modal').classList.remove('active');
         }
 
+        // Edit modal
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.remove('active');
+        }
+
+        let currentEditingAgentId = null;
+
         function viewAgent(agentId) {
             const modal = document.getElementById('detail-modal');
             const title = document.getElementById('detail-title');
@@ -208,15 +265,38 @@
             content.innerHTML = '<div class="task-loading">Loading...</div>';
             modal.classList.add('active');
 
-            fetch('/api/agents/' + agentId)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.error) {
-                        content.innerHTML = '<p style="color: red;">' + data.error + '</p>';
+            // Fetch both agent info and cron info
+            Promise.all([
+                fetch('/api/agents/' + agentId).then(r => r.json()),
+                fetch('/api/agents/' + agentId + '/cron').then(r => r.json())
+            ])
+                .then(([agentData, cronData]) => {
+                    if (agentData.error) {
+                        content.innerHTML = '<p style="color: red;">' + agentData.error + '</p>';
                         return;
                     }
-                    const agent = data.agent;
+                    const agent = agentData.agent;
+                    const cron = cronData.cron;
+                    
                     title.innerHTML = agent.icon + ' ' + agent.name + ' <span class="agent-card-id">@' + agent.id + '</span>';
+                    
+                    let cronHtml = '';
+                    if (cron) {
+                        cronHtml = `
+                            <div style="margin-bottom: 16px;">
+                                <strong>⏰ 定时任务:</strong>
+                                <div style="background:var(--bg-secondary,#f3f4f6);padding:12px;border-radius:8px;margin-top:8px;font-size:13px;">
+                                    <div><strong>Cron:</strong> <code style="background:var(--bg-tertiary,#e5e7eb);padding:2px 6px;border-radius:4px;">${escapeHtml(cron.cron || 'N/A')}</code></div>
+                                    <div style="margin-top:8px;"><strong>状态:</strong> ${cron.enabled ? '<span style="color:green;">● 启用</span>' : '<span style="color:red;">● 禁用</span>'}</div>
+                                    ${cron.next_run ? '<div style="margin-top:8px;"><strong>下次运行:</strong> ' + cron.next_run + '</div>' : ''}
+                                    <div style="margin-top:8px;"><strong>消息:</strong><pre style="margin:4px 0 0 0;white-space:pre-wrap;">${escapeHtml(cron.message || 'N/A')}</pre></div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        cronHtml = '<div style="margin-bottom: 16px;"><strong>⏰ 定时任务:</strong> <span style="color: var(--text-secondary);">无</span></div>';
+                    }
+                    
                     content.innerHTML = `
                         <div style="margin-bottom: 16px;">
                             <strong>Status:</strong> <span class="agent-card-status ${agent.status}">${agent.status === 'active' ? '● 在职' : '● 已离职'}</span>
@@ -234,14 +314,146 @@
                             <strong>Hired at:</strong> ${agent.hired_at || 'N/A'}
                         </div>
                         ${agent.dismissed_at ? '<div style="margin-bottom: 16px;"><strong>Dismissed at:</strong> ' + agent.dismissed_at + ' by ' + (agent.dismissed_by || 'unknown') + '</div>' : ''}
-                        ${agent.soul_md ? '<div style="margin-bottom: 16px;"><strong>SOUL.md:</strong><pre style="background:var(--bg-secondary,#f3f4f6);padding:12px;border-radius:8px;white-space:pre-wrap;font-size:13px;max-height:300px;overflow-y:auto;">' + escapeHtml(agent.soul_md) + '</pre></div>' : ''}
-                        ${agent.agents_md ? '<div style="margin-bottom: 16px;"><strong>AGENTS.md:</strong><pre style="background:var(--bg-secondary,#f3f4f6);padding:12px;border-radius:8px;white-space:pre-wrap;font-size:13px;max-height:200px;overflow-y:auto;">' + escapeHtml(agent.agents_md) + '</pre></div>' : ''}
+                        ${cronHtml}
+                        ${agent.soul_md ? '<div style="margin-bottom: 16px;"><strong>📝 SOUL.md:</strong><pre style="background:var(--bg-secondary,#f3f4f6);padding:12px;border-radius:8px;white-space:pre-wrap;font-size:13px;max-height:300px;overflow-y:auto;">' + escapeHtml(agent.soul_md) + '</pre></div>' : ''}
+                        ${agent.agents_md ? '<div style="margin-bottom: 16px;"><strong>📋 AGENTS.md:</strong><pre style="background:var(--bg-secondary,#f3f4f6);padding:12px;border-radius:8px;white-space:pre-wrap;font-size:13px;max-height:200px;overflow-y:auto;">' + escapeHtml(agent.agents_md) + '</pre></div>' : ''}
+                        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color, #e5e7eb);">
+                            <button class="btn btn-primary" onclick="openEditModal('${agentId}')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                编辑角色配置
+                            </button>
+                        </div>
                     `;
                 })
                 .catch(err => {
                     content.innerHTML = '<p style="color: red;">Error: ' + err.message + '</p>';
                 });
         }
+
+        function openEditModal(agentId) {
+            currentEditingAgentId = agentId;
+            const modal = document.getElementById('edit-modal');
+            const title = document.getElementById('edit-title');
+            
+            title.innerHTML = 'Loading...';
+            document.getElementById('edit-agent-id').value = agentId;
+            document.getElementById('edit-soul-md').value = '';
+            document.getElementById('edit-agents-md').value = '';
+            document.getElementById('edit-cron-expr').value = '';
+            document.getElementById('edit-cron-message').value = '';
+            document.getElementById('edit-cron-status').textContent = '-';
+            
+            modal.classList.add('active');
+            
+            // Fetch agent and cron data
+            Promise.all([
+                fetch('/api/agents/' + agentId).then(r => r.json()),
+                fetch('/api/agents/' + agentId + '/cron').then(r => r.json())
+            ])
+                .then(([agentData, cronData]) => {
+                    const agent = agentData.agent;
+                    const cron = cronData.cron;
+                    
+                    title.innerHTML = '编辑: ' + agent.icon + ' ' + agent.name;
+                    document.getElementById('edit-soul-md').value = agent.soul_md || '';
+                    document.getElementById('edit-agents-md').value = agent.agents_md || '';
+                    
+                    if (cron) {
+                        document.getElementById('edit-cron-expr').value = cron.cron || '';
+                        document.getElementById('edit-cron-message').value = cron.message || '';
+                        document.getElementById('edit-cron-status').innerHTML = 
+                            cron.enabled 
+                                ? '<span style="color:green;">● 已启用</span>' 
+                                : '<span style="color:red;">● 已禁用</span>';
+                        if (cron.next_run) {
+                            document.getElementById('edit-cron-status').innerHTML += ' | 下次: ' + cron.next_run;
+                        }
+                    } else {
+                        document.getElementById('edit-cron-status').innerHTML = '<span style="color: var(--text-secondary);">无定时任务</span>';
+                    }
+                })
+                .catch(err => {
+                    window.App.showToast('加载失败: ' + err.message, 'error');
+                    closeEditModal();
+                });
+        }
+
+        // Edit form submit
+        document.getElementById('edit-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const agentId = document.getElementById('edit-agent-id').value;
+            const submitBtn = document.getElementById('edit-submit-btn');
+            const originalText = submitBtn.innerHTML;
+            
+            const soulMd = document.getElementById('edit-soul-md').value.trim();
+            const agentsMd = document.getElementById('edit-agents-md').value.trim();
+            const cronExpr = document.getElementById('edit-cron-expr').value.trim();
+            const cronMessage = document.getElementById('edit-cron-message').value.trim();
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span> 保存中...';
+            
+            // Update agent config
+            const updatePromises = [];
+            
+            if (soulMd || agentsMd) {
+                const agentUpdate = {
+                    operator: 'chairman'
+                };
+                if (soulMd) agentUpdate.soul_md = soulMd;
+                if (agentsMd) agentUpdate.agents_md = agentsMd;
+                
+                updatePromises.push(
+                    fetch('/api/agents/' + agentId, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(agentUpdate)
+                    }).then(r => r.json())
+                );
+            }
+            
+            // Update cron if changed
+            if (cronExpr || cronMessage) {
+                const cronUpdate = { operator: 'chairman' };
+                if (cronExpr) cronUpdate.cron = cronExpr;
+                if (cronMessage) cronUpdate.message = cronMessage;
+                
+                updatePromises.push(
+                    fetch('/api/agents/' + agentId + '/cron', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(cronUpdate)
+                    }).then(r => r.json())
+                );
+            }
+            
+            if (updatePromises.length === 0) {
+                window.App.showToast('没有需要保存的更改', 'info');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+                return;
+            }
+            
+            Promise.all(updatePromises)
+                .then(results => {
+                    const errors = results.filter(r => r.error);
+                    if (errors.length > 0) {
+                        window.App.showToast('保存失败: ' + errors.map(e => e.error).join(', '), 'error');
+                    } else {
+                        window.App.showToast('✓ 保存成功', 'success');
+                        closeEditModal();
+                        closeDetailModal();
+                    }
+                })
+                .catch(err => {
+                    window.App.showToast('保存失败: ' + err.message, 'error');
+                })
+                .finally(() => {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                });
+        });
 
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -356,6 +568,41 @@
         document.getElementById('detail-modal').addEventListener('click', function(e) {
             if (e.target === this) closeDetailModal();
         });
+        document.getElementById('edit-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeEditModal();
+        });
     </script>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Agent Forum - 多 Agent 协作空间</p>
+        </div>
+    </footer>
+
+    <!-- 移动端底部导航栏 -->
+    <nav class="mobile-nav">
+        <div class="mobile-nav-items">
+            <a href="/" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span>首页</span>
+            </a>
+            <a href="/team" class="mobile-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>团队</span>
+            </a>
+            <a href="/post/new" class="mobile-nav-item post-btn">
+                <div class="nav-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                </div>
+                <span>发布</span>
+            </a>
+            <a href="/notifications?recipient=human" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                <span>通知</span>
+            </a>
+        </div>
+    </nav>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

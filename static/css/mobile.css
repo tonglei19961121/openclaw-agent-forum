@@ -8,6 +8,7 @@
     --mobile-nav-height: 64px;
     --mobile-fab-size: 56px;
     --mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --mobile-safe-top: env(safe-area-inset-top, 0px);
     --mobile-touch-target: 44px;
 }
 
@@ -52,6 +53,13 @@
         left: 0;
         right: 0;
         z-index: 100;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        background: rgba(var(--bg-elevated-rgb, 255, 255, 255), 0.85);
+    }
+    
+    [data-theme="dark"] .header {
+        background: rgba(15, 15, 15, 0.9);
     }
     
     .header .container {
@@ -70,6 +78,13 @@
     
     .header .theme-toggle {
         display: flex;
+    }
+    
+    /* 移动端头部右侧显示主题切换 */
+    .header .mobile-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 }
 
@@ -93,7 +108,7 @@
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         border-top: 1px solid var(--border-primary);
-        z-index: 100;
+        z-index: 1000;
         padding-bottom: var(--mobile-safe-bottom);
         box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
     }
@@ -121,6 +136,7 @@
         font-weight: 500;
         transition: all 0.2s ease;
         min-height: var(--mobile-touch-target);
+        position: relative;
     }
     
     .mobile-nav-item.active {
@@ -131,6 +147,19 @@
         color: var(--primary-400);
     }
     
+    /* 活跃指示器 */
+    .mobile-nav-item.active::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 20px;
+        height: 3px;
+        background: var(--primary-600);
+        border-radius: 0 0 2px 2px;
+    }
+    
     .mobile-nav-item svg {
         width: 24px;
         height: 24px;
@@ -139,29 +168,39 @@
     /* 中间发布按钮 */
     .mobile-nav-item.post-btn {
         position: relative;
-        top: -16px;
+        top: -8px;
     }
     
     .mobile-nav-item.post-btn .nav-icon {
-        width: 48px;
-        height: 48px;
+        width: 44px;
+        height: 44px;
         background: var(--primary-600);
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .mobile-nav-item.post-btn:active .nav-icon {
+        transform: scale(0.95);
     }
     
     .mobile-nav-item.post-btn span {
         margin-top: 4px;
     }
     
-    /* 主内容区底部留白 */
+    /* 主内容区底部留白 - 增加空间避免被底部导航栏遮挡 */
     main {
-        padding-bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom) + 80px);
+        padding-bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom) + 120px);
         padding-top: 60px;
+    }
+    
+    /* 隐藏桌面端页脚在移动端 */
+    .footer {
+        display: none;
     }
 }
 
@@ -181,6 +220,24 @@
     body.home-page .fab {
         display: none;
     }
+    
+    /* 帖子详情页 FAB 位置调整 */
+    body .fab#back-to-top {
+        bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom) + 80px);
+        right: 16px;
+    }
+    
+    /* 滚动到底部按钮 */
+    body .fab#scroll-to-bottom {
+        bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom) + 80px);
+        right: 16px;
+        background: var(--success);
+    }
+    
+    body .fab#scroll-to-bottom:hover {
+        background: #059669;
+        box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+    }
 }
 
 @media (max-width: 640px) {
@@ -194,6 +251,22 @@
     .fab svg {
         width: 20px;
         height: 20px;
+    }
+    
+    /* 移动端隐藏 FAB tooltip */
+    .fab .fab-tooltip {
+        display: none;
+    }
+    
+    /* 调整两个 FAB 的位置 */
+    body .fab#back-to-top {
+        bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom) + 130px);
+        right: 12px;
+    }
+    
+    body .fab#scroll-to-bottom {
+        bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom) + 68px);
+        right: 12px;
     }
 }
 
@@ -227,6 +300,7 @@
         flex-wrap: nowrap;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
+        gap: 8px;
     }
     
     .agents-bar::-webkit-scrollbar {
@@ -235,6 +309,7 @@
     
     .agents-label {
         flex-shrink: 0;
+        font-size: 0.65rem;
     }
     
     .agent-tag {
@@ -251,6 +326,7 @@
     .post-card {
         padding: 16px;
         min-height: 80px;
+        border-radius: var(--radius-md);
     }
     
     .post-header {
@@ -308,13 +384,6 @@
    ============================================ */
 
 @media (max-width: 768px) {
-    /* 限制首屏显示3-5条帖子 */
-    .posts-list {
-        max-height: calc(100vh - 200px);
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    
     /* 空状态优化 */
     .empty-state {
         padding: 40px 20px;
@@ -343,6 +412,7 @@
     .post-detail {
         padding: 20px;
         margin-bottom: 16px;
+        border-radius: var(--radius-lg);
     }
     
     .post-detail .post-title {
@@ -357,10 +427,20 @@
     
     .replies-section {
         padding: 20px;
+        border-radius: var(--radius-lg);
     }
     
     .reply-card {
-        padding: 16px 0;
+        padding: 0;
+        margin-bottom: 12px;
+    }
+
+    .reply-header {
+        padding: 12px 16px;
+    }
+
+    .reply-body {
+        padding: 0 16px 16px 16px;
     }
     
     .reply-content {
@@ -368,14 +448,43 @@
     }
     
     .reply-form-section {
-        padding: 20px;
+        padding: 20px 20px 100px 20px;
+        border-radius: var(--radius-lg);
+        margin-bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom));
+    }
+    
+    /* 帖子操作区域移动端优化 */
+    .post-actions {
+        padding: 16px;
+    }
+    
+    .post-actions-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .post-actions-header > div {
+        width: 100%;
+    }
+    
+    .post-actions-header select.form-control {
+        width: 100% !important;
+        min-width: unset !important;
+    }
+    
+    .post-actions-header form {
+        width: 100%;
+    }
+    
+    .post-actions-header .btn-danger {
+        width: 100%;
     }
 }
 
 @media (max-width: 640px) {
     .post-detail {
         padding: 16px;
-        border-radius: var(--radius-lg);
     }
     
     .post-detail .post-title {
@@ -383,6 +492,10 @@
     }
     
     .replies-section {
+        padding: 16px;
+    }
+    
+    .reply-form-section {
         padding: 16px;
     }
 }
@@ -394,6 +507,7 @@
 @media (max-width: 768px) {
     .post-form {
         padding: 20px;
+        border-radius: var(--radius-lg);
     }
     
     .form-group {
@@ -402,7 +516,7 @@
     
     .form-control {
         padding: 12px 14px;
-        font-size: 16px;
+        font-size: 16px; /* 防止 iOS 缩放 */
         min-height: var(--mobile-touch-target);
     }
     
@@ -424,10 +538,117 @@
         padding: 14px 24px;
         font-size: 1rem;
     }
+    
+    /* 快捷键提示在移动端隐藏 */
+    .shortcut-hint {
+        display: none !important;
+    }
+    
+    /* 表单提示优化 */
+    .form-hint {
+        padding: 12px;
+        font-size: 0.8125rem;
+    }
+    
+    /* 预览面板移动端优化 */
+    .preview-panel {
+        padding: 16px;
+    }
 }
 
 /* ============================================
-   9. 触摸目标优化
+   9. 通知页面移动端优化
+   ============================================ */
+
+@media (max-width: 768px) {
+    .recipient-selector {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        width: 100%;
+    }
+    
+    .recipient-selector select.form-control {
+        width: 100%;
+    }
+    
+    .notifications-stats {
+        margin-bottom: 16px;
+    }
+    
+    .notification-card {
+        padding: 16px;
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .notification-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+    
+    .notification-content {
+        width: 100%;
+    }
+    
+    .notification-title {
+        font-size: 0.9375rem;
+    }
+    
+    .notification-body {
+        font-size: 0.8125rem;
+    }
+    
+    .notification-actions {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+    
+    .notification-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+/* ============================================
+   10. 团队页面移动端优化
+   ============================================ */
+
+@media (max-width: 768px) {
+    .team-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .team-member-card {
+        padding: 16px;
+    }
+    
+    .team-member-header {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .team-member-avatar {
+        width: 48px;
+        height: 48px;
+    }
+    
+    .analytics-cards {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .analytics-card {
+        padding: 16px;
+    }
+}
+
+/* ============================================
+   11. 触摸目标优化
    ============================================ */
 
 @media (max-width: 768px) {
@@ -436,9 +657,10 @@
     .post-card,
     .notification-card,
     .mobile-nav-item,
-    .theme-toggle {
+    .theme-toggle,
+    .mark-read,
+    .agent-tag {
         min-height: var(--mobile-touch-target);
-        min-width: var(--mobile-touch-target);
     }
     
     a {
@@ -447,16 +669,25 @@
     
     .pagination {
         gap: 12px;
+        flex-wrap: wrap;
     }
     
     .pagination .btn {
         min-height: var(--mobile-touch-target);
         padding: 12px 20px;
+        flex: 1;
+    }
+    
+    .page-info {
+        width: 100%;
+        text-align: center;
+        order: -1;
+        margin-bottom: 8px;
     }
 }
 
 /* ============================================
-   10. 安全区域适配
+   12. 安全区域适配
    ============================================ */
 
 @supports (padding: max(0px)) {
@@ -472,11 +703,16 @@
         main {
             padding-bottom: max(calc(var(--mobile-nav-height) + 80px), 80px);
         }
+        
+        /* 刘海屏适配 */
+        .header {
+            padding-top: max(var(--mobile-safe-top), 12px);
+        }
     }
 }
 
 /* ============================================
-   11. 动画性能优化
+   13. 动画性能优化
    ============================================ */
 
 @media (max-width: 768px) {
@@ -492,5 +728,96 @@
     
     .fab:hover {
         transform: scale(1.05);
+    }
+    
+    /* 减少移动端动画 */
+    .post-card,
+    .notification-card {
+        animation: none;
+    }
+}
+
+/* ============================================
+   14. 下拉刷新指示器
+   ============================================ */
+
+.pull-to-refresh {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .pull-to-refresh {
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-primary);
+        z-index: 99;
+        transform: translateY(-100%);
+        transition: transform 0.2s ease;
+    }
+    
+    .pull-to-refresh.visible {
+        transform: translateY(0);
+    }
+    
+    .pull-to-refresh-spinner {
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--border-primary);
+        border-top-color: var(--primary-500);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+}
+
+/* ============================================
+   15. Toast 移动端优化
+   ============================================ */
+
+@media (max-width: 768px) {
+    .toast-container {
+        top: auto;
+        bottom: calc(var(--mobile-nav-height) + var(--mobile-safe-bottom) + 16px);
+        left: 16px;
+        right: 16px;
+        align-items: center;
+    }
+    
+    .toast {
+        min-width: unset;
+        max-width: 100%;
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ============================================
+   16. 任务板移动端优化
+   ============================================ */
+
+@media (max-width: 768px) {
+    .task-board {
+        padding: 16px;
+        margin: 16px 0;
+    }
+    
+    .task-board-header h3 {
+        font-size: 1rem;
+    }
+    
+    .task-item {
+        padding: 12px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .task-assignee {
+        align-self: flex-end;
     }
 }

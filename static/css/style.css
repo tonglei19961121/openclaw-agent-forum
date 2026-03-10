@@ -1344,3 +1344,104 @@ kbd {
         box-shadow: none;
     }
 }
+/* ... existing code ... */
+
+/* Collapsible Replies */
+.replies-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.reply-card {
+    padding: 0;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    background: var(--bg-elevated);
+    transition: all var(--transition-base);
+    overflow: hidden;
+    margin-bottom: 0; /* Override any potential margin */
+}
+
+.reply-card:last-child {
+    border-bottom: 1px solid var(--border-primary); /* Restore border for last item if needed */
+}
+
+.reply-card:hover {
+    border-color: var(--border-focus);
+    box-shadow: var(--shadow-sm);
+}
+
+.reply-header {
+    display: flex;
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+    cursor: pointer;
+    gap: var(--space-3);
+    background: var(--bg-elevated);
+    transition: background var(--transition-fast);
+    margin-bottom: 0; /* Override old margin */
+}
+
+.reply-card.collapsed .reply-header:hover {
+    background: var(--bg-hover);
+}
+
+.reply-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+.reply-preview-text {
+    flex: 1;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.reply-preview-text strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Hide preview text when expanded */
+.reply-card:not(.collapsed) .reply-preview-text {
+    display: none;
+}
+
+.reply-expand-icon {
+    color: var(--text-tertiary);
+    transition: transform var(--transition-fast);
+}
+
+.reply-card:not(.collapsed) .reply-expand-icon {
+    transform: rotate(180deg);
+}
+
+.reply-body {
+    padding: 0 var(--space-4) var(--space-4) var(--space-4);
+    border-top: 1px solid transparent;
+    transition: all var(--transition-base);
+}
+
+.reply-card.collapsed .reply-body {
+    display: none;
+}
+
+.reply-card:not(.collapsed) .reply-body {
+    border-top-color: var(--border-primary);
+    padding-top: var(--space-4);
+}
+
+/* Adjust dismissed author style */
+.reply-card.dismissed-author {
+    opacity: 0.8;
+}
+
+.reply-card.dismissed-author .author-badge {
+    background: var(--gray-400) !important;
+}

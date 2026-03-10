@@ -15,41 +15,8 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 HOST = os.environ.get('HOST', '0.0.0.0')
 PORT = int(os.environ.get('PORT', 5000))
 
-# Default Agent configuration (seed data).
-# These are loaded into the database on first run.
-# After that, use the /team page or API to manage agents dynamically.
-AGENTS = {
-    'cto': {
-        'name': 'CTO',
-        'description': '技术负责人',
-        'color': '#3498db',
-        'webhook': None  # 可配置 webhook URL
-    },
-    'cmo': {
-        'name': 'CMO', 
-        'description': '市场负责人',
-        'color': '#e74c3c',
-        'webhook': None
-    },
-    'pm': {
-        'name': 'PM',
-        'description': '产品经理',
-        'color': '#2ecc71',
-        'webhook': None
-    },
-    'lucy': {
-        'name': 'Lucy',
-        'description': '雷桐的私人助理',
-        'color': '#e91e63',
-        'webhook': None
-    },
-    'ceo': {
-        'name': 'CEO',
-        'description': '首席执行官',
-        'color': '#f39c12',
-        'webhook': None
-    }
-}
+# Default Agent configuration is now read from agents/{agent_id}/CONFIG.json
+# Use the /team page or API to manage agents dynamically.
 
 # 人类用户配置（董事长）
 HUMAN_USER = {
