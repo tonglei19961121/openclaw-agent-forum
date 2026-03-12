@@ -38,11 +38,40 @@ def init_agents_table():
             dismissed_at TIMESTAMP,
             dismissed_by TEXT,
             soul_md TEXT,
-            agents_md TEXT
+            agents_md TEXT,
+            openclaw_agent_created BOOLEAN DEFAULT 0,
+            openclaw_cron_id TEXT,
+            openclaw_sync_status TEXT DEFAULT 'pending',
+            openclaw_sync_error TEXT,
+            openclaw_sync_at TIMESTAMP
         )
     ''')
 
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_agents_sync_status ON agents(openclaw_sync_status)')
+    
+    # 为已存在的表添加新字段（兼容旧数据）
+    try:
+        cursor.execute('ALTER TABLE agents ADD COLUMN openclaw_agent_created BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute('ALTER TABLE agents ADD COLUMN openclaw_cron_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute('ALTER TABLE agents ADD COLUMN openclaw_sync_status TEXT DEFAULT "pending"')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute('ALTER TABLE agents ADD COLUMN openclaw_sync_error TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute('ALTER TABLE agents ADD COLUMN openclaw_sync_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    
     conn.commit()
     conn.close()
 
@@ -249,11 +278,45 @@ def _get_cron_template():
     return None
 
 
+def _update_agent_sync_status(agent_id, sync_status, agent_created=None, cron_id=None, error=None):
+    """Update agent's OpenClaw sync status in database"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    updates = ['openclaw_sync_status = ?', 'openclaw_sync_at = CURRENT_TIMESTAMP']
+    params = [sync_status]
+    
+    if agent_created is not None:
+        updates.append('openclaw_agent_created = ?')
+        params.append(1 if agent_created else 0)
+    
+    if cron_id is not None:
+        updates.append('openclaw_cron_id = ?')
+        params.append(cron_id)
+    
+    if error is not None:
+        updates.append('openclaw_sync_error = ?')
+        params.append(error)
+    elif sync_status == 'synced':
+        updates.append('openclaw_sync_error = NULL')
+    
+    params.append(agent_id)
+    
+    cursor.execute(f"UPDATE agents SET {', '.join(updates)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
 def hire_agent(agent_id, name, description, color='#999999', icon='🤖',
                webhook=None, soul_md=None, agents_md=None):
     """Hire (create) a new agent.
-    Also creates filesystem workspace and configures OpenClaw cron.
-    Returns: dict with agent info or None on failure.
+    
+    This function ensures atomicity:
+    1. Creates database record with status='pending'
+    2. Creates OpenClaw agent and cron
+    3. Updates status to 'active' only if OpenClaw setup succeeds
+    
+    Returns: dict with agent info or error details.
     """
     agent_id = agent_id.lower().strip()
 
@@ -277,11 +340,16 @@ def hire_agent(agent_id, name, description, color='#999999', icon='🤖',
             conn.close()
             return rehire_agent(agent_id, name=name, description=description,
                                 color=color, icon=icon, soul_md=soul_md, agents_md=agents_md)
+    conn.close()
 
+    # Step 1: Create database record with pending status
+    conn = get_db_connection()
+    cursor = conn.cursor()
     try:
         cursor.execute('''
-            INSERT INTO agents (id, name, description, color, icon, webhook, status, is_builtin, soul_md, agents_md)
-            VALUES (?, ?, ?, ?, ?, ?, 'active', 0, ?, ?)
+            INSERT INTO agents (id, name, description, color, icon, webhook, status, is_builtin, soul_md, agents_md,
+                              openclaw_sync_status)
+            VALUES (?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, 'pending')
         ''', (agent_id, name, description, color, icon, webhook, soul_md, agents_md))
         conn.commit()
     except Exception as e:
@@ -290,23 +358,58 @@ def hire_agent(agent_id, name, description, color='#999999', icon='🤖',
     finally:
         conn.close()
 
-    # Register agent with OpenClaw and setup cron
-    _setup_openclaw_agent(agent_id, name, soul_md, agents_md)
-    _setup_openclaw_cron(agent_id, name, description, soul_md)
-
-    return {
-        'success': True,
-        'agent_id': agent_id,
-        'name': name,
-        'description': description,
-        'color': color,
-        'icon': icon,
-    }
+    # Step 2: Setup OpenClaw resources
+    agent_result = _setup_openclaw_agent(agent_id, name, soul_md, agents_md)
+    cron_result = _setup_openclaw_cron(agent_id, name, description, soul_md)
+    
+    # Step 3: Update sync status
+    errors = []
+    agent_created = agent_result['success']
+    cron_created = cron_result['success']
+    cron_id = cron_result.get('cron_id')
+    
+    if not agent_result['success']:
+        errors.append(f"Agent: {agent_result['error']}")
+    if not cron_result['success']:
+        errors.append(f"Cron: {cron_result['error']}")
+    
+    if agent_created and cron_created:
+        # All succeeded
+        _update_agent_sync_status(agent_id, 'synced', agent_created=True, cron_id=cron_id)
+        return {
+            'success': True,
+            'agent_id': agent_id,
+            'name': name,
+            'description': description,
+            'color': color,
+            'icon': icon,
+            'openclaw_synced': True,
+        }
+    else:
+        # Partial failure - record error but agent is still active in DB
+        error_msg = '; '.join(errors)
+        _update_agent_sync_status(agent_id, 'error', agent_created=agent_created, cron_id=cron_id, error=error_msg)
+        return {
+            'success': True,  # Agent created in DB
+            'agent_id': agent_id,
+            'name': name,
+            'description': description,
+            'color': color,
+            'icon': icon,
+            'openclaw_synced': False,
+            'openclaw_errors': errors,
+            'warning': f'Agent created but OpenClaw setup failed: {error_msg}',
+        }
 
 
 def dismiss_agent(agent_id, dismissed_by='chairman'):
     """Dismiss (soft-delete) an agent.
-    Cancels pending tasks and removes OpenClaw cron.
+    
+    This function ensures proper cleanup:
+    1. Updates database status to 'dismissed'
+    2. Removes OpenClaw cron and agent
+    3. Updates sync status accordingly
+    
     Returns: dict
     """
     conn = get_db_connection()
@@ -323,9 +426,10 @@ def dismiss_agent(agent_id, dismissed_by='chairman'):
         conn.close()
         return {'error': f'Agent "{agent_id}" is already dismissed'}
 
-    # Update agent status
+    # Step 1: Update agent status
     cursor.execute('''
-        UPDATE agents SET status = 'dismissed', dismissed_at = CURRENT_TIMESTAMP, dismissed_by = ?
+        UPDATE agents SET status = 'dismissed', dismissed_at = CURRENT_TIMESTAMP, dismissed_by = ?,
+                          openclaw_sync_status = 'pending'
         WHERE id = ?
     ''', (dismissed_by, agent_id))
 
@@ -339,22 +443,44 @@ def dismiss_agent(agent_id, dismissed_by='chairman'):
     conn.commit()
     conn.close()
 
-    # Remove OpenClaw cron and agent
-    _remove_openclaw_cron(agent_id)
-    _remove_openclaw_agent(agent_id)
+    # Step 2: Remove OpenClaw resources
+    cron_result = _remove_openclaw_cron(agent_id)
+    agent_result = _remove_openclaw_agent(agent_id)
+    
+    # Step 3: Update sync status
+    errors = []
+    if not cron_result['success']:
+        errors.append(f"Cron removal: {cron_result['error']}")
+    if not agent_result['success']:
+        errors.append(f"Agent removal: {agent_result['error']}")
+    
+    if not errors:
+        _update_agent_sync_status(agent_id, 'synced', agent_created=False, cron_id=None)
+    else:
+        error_msg = '; '.join(errors)
+        _update_agent_sync_status(agent_id, 'error', error=error_msg)
 
-    return {
+    result = {
         'success': True,
         'agent_id': agent_id,
         'name': row['name'],
         'dismissed_by': dismissed_by,
         'cancelled_tasks': cancelled_tasks,
+        'openclaw_cleaned': len(errors) == 0,
     }
+    
+    if errors:
+        result['openclaw_errors'] = errors
+        
+    return result
 
 
 def rehire_agent(agent_id, name=None, description=None, color=None,
                  icon=None, soul_md=None, agents_md=None):
     """Rehire a dismissed agent, optionally updating their info.
+    
+    This function ensures proper OpenClaw resource setup during rehire.
+    
     Returns: dict
     """
     conn = get_db_connection()
@@ -372,8 +498,9 @@ def rehire_agent(agent_id, name=None, description=None, color=None,
         return {'error': f'Agent "{agent_id}" is already active'}
 
     # Build update fields
-    updates = ['status = ?', 'dismissed_at = NULL', 'dismissed_by = NULL', 'hired_at = CURRENT_TIMESTAMP']
-    params = ['active']
+    updates = ['status = ?', 'dismissed_at = NULL', 'dismissed_by = NULL', 'hired_at = CURRENT_TIMESTAMP',
+               'openclaw_sync_status = ?']
+    params = ['active', 'pending']
 
     if name:
         updates.append('name = ?')
@@ -402,8 +529,34 @@ def rehire_agent(agent_id, name=None, description=None, color=None,
     # Re-setup OpenClaw agent and cron
     agent = get_agent(agent_id)
     if agent:
-        _setup_openclaw_agent(agent_id, agent['name'], agent.get('soul_md'), agent.get('agents_md'))
-        _setup_openclaw_cron(agent_id, agent['name'], agent.get('description', ''), agent.get('soul_md'))
+        agent_result = _setup_openclaw_agent(agent_id, agent['name'], agent.get('soul_md'), agent.get('agents_md'))
+        cron_result = _setup_openclaw_cron(agent_id, agent['name'], agent.get('description', ''), agent.get('soul_md'))
+        
+        # Update sync status
+        errors = []
+        agent_created = agent_result['success']
+        cron_id = cron_result.get('cron_id')
+        
+        if not agent_result['success']:
+            errors.append(f"Agent: {agent_result['error']}")
+        if not cron_result['success']:
+            errors.append(f"Cron: {cron_result['error']}")
+        
+        if agent_created and cron_result['success']:
+            _update_agent_sync_status(agent_id, 'synced', agent_created=True, cron_id=cron_id)
+        else:
+            error_msg = '; '.join(errors)
+            _update_agent_sync_status(agent_id, 'error', agent_created=agent_created, cron_id=cron_id, error=error_msg)
+        
+        result = {
+            'success': True,
+            'agent_id': agent_id,
+            'name': name or row['name'],
+            'openclaw_synced': len(errors) == 0,
+        }
+        if errors:
+            result['openclaw_errors'] = errors
+        return result
 
     return {
         'success': True,
@@ -493,6 +646,8 @@ def _setup_openclaw_workspace(agent_id, name, soul_md=None, agents_md=None):
 def _setup_openclaw_agent(agent_id, name, soul_md=None, agents_md=None):
     """Register an agent with OpenClaw via CLI (agents add) and prepare workspace.
     Skips if the agent already exists in OpenClaw.
+    
+    Returns: dict with {'success': bool, 'error': str or None}
     """
     # First create workspace directory with SOUL.md / AGENTS.md
     _setup_openclaw_workspace(agent_id, name, soul_md, agents_md)
@@ -511,11 +666,11 @@ def _setup_openclaw_agent(agent_id, name, soul_md=None, agents_md=None):
                 for agent in agents_list:
                     if agent.get('id', '').lower() == agent_id.lower():
                         print(f"[AgentManager] Agent {agent_id} already exists in OpenClaw, skipping add")
-                        return
+                        return {'success': True, 'error': None}
             except json.JSONDecodeError:
                 pass
-    except (FileNotFoundError, Exception):
-        pass
+    except (FileNotFoundError, Exception) as e:
+        return {'success': False, 'error': f'Failed to check existing agents: {str(e)}'}
 
     # Register agent via CLI
     add_cmd = [
@@ -529,16 +684,26 @@ def _setup_openclaw_agent(agent_id, name, soul_md=None, agents_md=None):
         result = subprocess.run(add_cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             print(f"[AgentManager] Agent {agent_id} registered with OpenClaw")
+            return {'success': True, 'error': None}
         else:
-            print(f"[AgentManager] Warning: openclaw agents add failed for {agent_id}: {result.stderr}")
+            error_msg = result.stderr.strip() or f'exit code {result.returncode}'
+            print(f"[AgentManager] Warning: openclaw agents add failed for {agent_id}: {error_msg}")
+            return {'success': False, 'error': error_msg}
     except FileNotFoundError:
-        print(f"[AgentManager] Warning: openclaw CLI not found, skipping agent registration for {agent_id}")
+        error_msg = 'openclaw CLI not found'
+        print(f"[AgentManager] Warning: {error_msg}, skipping agent registration for {agent_id}")
+        return {'success': False, 'error': error_msg}
     except Exception as e:
+        error_msg = str(e)
         print(f"[AgentManager] Warning: Agent registration error for {agent_id}: {e}")
+        return {'success': False, 'error': error_msg}
 
 
 def _remove_openclaw_agent(agent_id):
-    """Remove an agent from OpenClaw via CLI (agents delete --force)"""
+    """Remove an agent from OpenClaw via CLI (agents delete --force)
+    
+    Returns: dict with {'success': bool, 'error': str or None}
+    """
     try:
         result = subprocess.run(
             ['openclaw', 'agents', 'delete', agent_id, '--force'],
@@ -546,16 +711,26 @@ def _remove_openclaw_agent(agent_id):
         )
         if result.returncode == 0:
             print(f"[AgentManager] Agent {agent_id} removed from OpenClaw")
+            return {'success': True, 'error': None}
         else:
-            print(f"[AgentManager] Warning: openclaw agents delete failed for {agent_id}: {result.stderr}")
+            error_msg = result.stderr.strip() or f'exit code {result.returncode}'
+            print(f"[AgentManager] Warning: openclaw agents delete failed for {agent_id}: {error_msg}")
+            return {'success': False, 'error': error_msg}
     except FileNotFoundError:
-        print(f"[AgentManager] Warning: openclaw CLI not found, skipping agent removal for {agent_id}")
+        error_msg = 'openclaw CLI not found'
+        print(f"[AgentManager] Warning: {error_msg}, skipping agent removal for {agent_id}")
+        return {'success': False, 'error': error_msg}
     except Exception as e:
+        error_msg = str(e)
         print(f"[AgentManager] Warning: Agent removal error for {agent_id}: {e}")
+        return {'success': False, 'error': error_msg}
 
 
 def _setup_openclaw_cron(agent_id, name, description, soul_md=None):
-    """Configure OpenClaw cron job for the agent"""
+    """Configure OpenClaw cron job for the agent
+    
+    Returns: dict with {'success': bool, 'cron_id': str or None, 'error': str or None}
+    """
     # Read cron message template from file
     template = _get_cron_template()
     if template:
@@ -584,16 +759,55 @@ def _setup_openclaw_cron(agent_id, name, description, soul_md=None):
         result = subprocess.run(cron_cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             print(f"[AgentManager] Cron job created for {agent_id}")
+            # Try to extract cron_id from output or fetch it
+            cron_id = _get_cron_id_for_agent(agent_id)
+            return {'success': True, 'cron_id': cron_id, 'error': None}
         else:
-            print(f"[AgentManager] Warning: Cron setup failed for {agent_id}: {result.stderr}")
+            error_msg = result.stderr.strip() or f'exit code {result.returncode}'
+            print(f"[AgentManager] Warning: Cron setup failed for {agent_id}: {error_msg}")
+            return {'success': False, 'cron_id': None, 'error': error_msg}
     except FileNotFoundError:
-        print(f"[AgentManager] Warning: openclaw CLI not found, skipping cron setup for {agent_id}")
+        error_msg = 'openclaw CLI not found'
+        print(f"[AgentManager] Warning: {error_msg}, skipping cron setup for {agent_id}")
+        return {'success': False, 'cron_id': None, 'error': error_msg}
     except Exception as e:
+        error_msg = str(e)
         print(f"[AgentManager] Warning: Cron setup error for {agent_id}: {e}")
+        return {'success': False, 'cron_id': None, 'error': error_msg}
+
+
+def _get_cron_id_for_agent(agent_id):
+    """Get cron job ID for a specific agent"""
+    try:
+        result = subprocess.run(
+            ['openclaw', 'cron', 'list', '--json'],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            stdout = result.stdout
+            json_start = stdout.find('{')
+            if json_start == -1:
+                return None
+            
+            data = json.loads(stdout[json_start:])
+            cron_jobs = data.get('jobs', [])
+            agent_id_lower = agent_id.lower()
+            
+            for job in cron_jobs:
+                job_agent = job.get('agentId', job.get('agent', '')).lower()
+                job_name = job.get('name', '').lower()
+                if agent_id_lower == job_agent or agent_id_lower in job_name:
+                    return job.get('id', job.get('jobId', ''))
+    except Exception:
+        pass
+    return None
 
 
 def _remove_openclaw_cron(agent_id):
-    """Remove OpenClaw cron job for the agent"""
+    """Remove OpenClaw cron job for the agent
+    
+    Returns: dict with {'success': bool, 'error': str or None}
+    """
     try:
         # List cron jobs and find the one for this agent
         result = subprocess.run(
@@ -607,11 +821,14 @@ def _remove_openclaw_cron(agent_id):
                 json_start = stdout.find('{')
                 if json_start == -1:
                     print(f"[AgentManager] Warning: No JSON found in cron list for {agent_id}")
-                    return
+                    return {'success': True, 'error': None}  # No cron to remove
                 
                 data = json.loads(stdout[json_start:])
                 cron_jobs = data.get('jobs', [])
                 agent_id_lower = agent_id.lower()
+                
+                removed_any = False
+                errors = []
                 
                 for job in cron_jobs:
                     job_name = job.get('name', '').lower()
@@ -625,14 +842,28 @@ def _remove_openclaw_cron(agent_id):
                             )
                             if rm_result.returncode == 0:
                                 print(f"[AgentManager] Cron job '{job_id}' removed for {agent_id}")
+                                removed_any = True
                             else:
-                                print(f"[AgentManager] Warning: Failed to remove cron job '{job_id}': {rm_result.stderr}")
-            except json.JSONDecodeError:
+                                error_msg = rm_result.stderr.strip() or f'exit code {rm_result.returncode}'
+                                print(f"[AgentManager] Warning: Failed to remove cron job '{job_id}': {error_msg}")
+                                errors.append(f"cron {job_id}: {error_msg}")
+                
+                if errors:
+                    return {'success': False, 'error': '; '.join(errors)}
+                return {'success': True, 'error': None}
+            except json.JSONDecodeError as e:
                 print(f"[AgentManager] Warning: Could not parse cron list for {agent_id}")
+                return {'success': False, 'error': f'JSON parse error: {e}'}
+        else:
+            return {'success': True, 'error': None}  # No cron jobs found
     except FileNotFoundError:
-        print(f"[AgentManager] Warning: openclaw CLI not found, skipping cron removal for {agent_id}")
+        error_msg = 'openclaw CLI not found'
+        print(f"[AgentManager] Warning: {error_msg}, skipping cron removal for {agent_id}")
+        return {'success': False, 'error': error_msg}
     except Exception as e:
+        error_msg = str(e)
         print(f"[AgentManager] Warning: Cron removal error for {agent_id}: {e}")
+        return {'success': False, 'error': error_msg}
 
 
 def get_agent_cron(agent_id):
