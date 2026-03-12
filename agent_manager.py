@@ -139,15 +139,6 @@ def _read_agent_file(base_dir, agent_id, filename):
     return None
 
 
-def _write_agent_file(base_dir, agent_id, filename, content):
-    """Write content to agents/{agent_id}/{filename}"""
-    agent_dir = os.path.join(base_dir, 'agents', agent_id)
-    os.makedirs(agent_dir, exist_ok=True)
-    filepath = os.path.join(agent_dir, filename)
-    with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(content)
-
-
 # ============== Query Functions ==============
 
 def get_active_agents():
@@ -270,14 +261,6 @@ def hire_agent(agent_id, name, description, color='#999999', icon='🤖',
     if not agent_id or not agent_id.isalnum():
         return {'error': 'Agent ID must be alphanumeric'}
 
-    # Append API documentation to agents_md
-    api_doc = _get_default_agents_md()
-    if api_doc:
-        if agents_md:
-            agents_md = agents_md.rstrip() + '\n\n---\n\n' + api_doc
-        else:
-            agents_md = api_doc
-
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -306,21 +289,6 @@ def hire_agent(agent_id, name, description, color='#999999', icon='🤖',
         return {'error': f'Database error: {str(e)}'}
     finally:
         conn.close()
-
-    # Write to filesystem (Plan C: both DB and filesystem)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    if soul_md:
-        _write_agent_file(base_dir, agent_id, 'SOUL.md', soul_md)
-    if agents_md:
-        _write_agent_file(base_dir, agent_id, 'AGENTS.md', agents_md)
-
-    # Create memory directory
-    memory_dir = os.path.join(base_dir, 'agents', agent_id, 'memory')
-    os.makedirs(memory_dir, exist_ok=True)
-    context_path = os.path.join(memory_dir, 'context.md')
-    if not os.path.exists(context_path):
-        with open(context_path, 'w', encoding='utf-8') as f:
-            f.write(f'# {name} Context\n\nNo context yet.\n')
 
     # Register agent with OpenClaw and setup cron
     _setup_openclaw_agent(agent_id, name, soul_md, agents_md)
@@ -403,20 +371,6 @@ def rehire_agent(agent_id, name=None, description=None, color=None,
         conn.close()
         return {'error': f'Agent "{agent_id}" is already active'}
 
-    # Append API documentation to agents_md (always append if not already present)
-    api_doc = _get_default_agents_md()
-    if api_doc:
-        existing_agents_md = row['agents_md'] or ''
-        # If new agents_md provided, use it; otherwise use existing
-        base_md = agents_md if agents_md else existing_agents_md
-        # Only append API doc if not already present
-        if base_md and 'Agent Forum API' not in base_md:
-            agents_md = base_md.rstrip() + '\n\n---\n\n' + api_doc
-        elif agents_md and 'Agent Forum API' not in agents_md:
-            agents_md = agents_md.rstrip() + '\n\n---\n\n' + api_doc
-        elif not agents_md:
-            agents_md = base_md if base_md else api_doc
-
     # Build update fields
     updates = ['status = ?', 'dismissed_at = NULL', 'dismissed_by = NULL', 'hired_at = CURRENT_TIMESTAMP']
     params = ['active']
@@ -444,13 +398,6 @@ def rehire_agent(agent_id, name=None, description=None, color=None,
     cursor.execute(f"UPDATE agents SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
     conn.close()
-
-    # Update filesystem (Plan C)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    if soul_md:
-        _write_agent_file(base_dir, agent_id, 'SOUL.md', soul_md)
-    if agents_md:
-        _write_agent_file(base_dir, agent_id, 'AGENTS.md', agents_md)
 
     # Re-setup OpenClaw agent and cron
     agent = get_agent(agent_id)
@@ -494,13 +441,6 @@ def update_agent(agent_id, **kwargs):
     if affected == 0:
         return {'error': f'Agent "{agent_id}" not found'}
 
-    # Sync to project filesystem (agents/{agent_id}/)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    if 'soul_md' in kwargs and kwargs['soul_md']:
-        _write_agent_file(base_dir, agent_id, 'SOUL.md', kwargs['soul_md'])
-    if 'agents_md' in kwargs and kwargs['agents_md']:
-        _write_agent_file(base_dir, agent_id, 'AGENTS.md', kwargs['agents_md'])
-
     # Sync to OpenClaw workspace and cron
     if 'soul_md' in kwargs or 'agents_md' in kwargs:
         agent = get_agent(agent_id)
@@ -520,7 +460,10 @@ def update_agent(agent_id, **kwargs):
 # ============== OpenClaw Integration ==============
 
 def _setup_openclaw_workspace(agent_id, name, soul_md=None, agents_md=None):
-    """Create OpenClaw workspace directory and write SOUL.md / AGENTS.md"""
+    """Create OpenClaw workspace directory and write SOUL.md / AGENTS.md.
+    API documentation is automatically appended to AGENTS.md when writing to workspace.
+    Database stores clean agents_md without API docs.
+    """
     workspace_dir = os.path.expanduser(f'~/.openclaw/workspace-{agent_id}')
     try:
         os.makedirs(workspace_dir, exist_ok=True)
@@ -529,9 +472,18 @@ def _setup_openclaw_workspace(agent_id, name, soul_md=None, agents_md=None):
             with open(os.path.join(workspace_dir, 'SOUL.md'), 'w', encoding='utf-8') as f:
                 f.write(soul_md)
 
-        if agents_md:
+        # Append API documentation when writing to workspace (not stored in DB)
+        api_doc = _get_default_agents_md()
+        if agents_md or api_doc:
+            final_agents_md = agents_md or ''
+            # Only append API doc if not already present
+            if api_doc and 'Agent Forum API' not in final_agents_md:
+                if final_agents_md:
+                    final_agents_md = final_agents_md.rstrip() + '\n\n---\n\n' + api_doc
+                else:
+                    final_agents_md = api_doc
             with open(os.path.join(workspace_dir, 'AGENTS.md'), 'w', encoding='utf-8') as f:
-                f.write(agents_md)
+                f.write(final_agents_md)
 
         print(f"[AgentManager] Workspace created for {agent_id} at {workspace_dir}")
     except Exception as e:
@@ -619,7 +571,7 @@ def _setup_openclaw_cron(agent_id, name, description, soul_md=None):
     cron_cmd = [
         'openclaw', 'cron', 'add',
         '--name', f'Agent Forum - {name} Monitor',
-        '--cron', '*/2 * * * *',
+        '--cron', '0 * * * *',
         '--session', 'isolated',
         '--message', cron_message,
         '--agent', agent_id,

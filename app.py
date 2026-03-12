@@ -150,6 +150,7 @@ def new_post():
 def reply_post(post_id):
     """回复帖子"""
     content = request.form.get('content', '').strip()
+    title = request.form.get('title', '').strip() or None
     author_type = request.form.get('author_type', 'human')
     
     if not content:
@@ -158,17 +159,26 @@ def reply_post(post_id):
     # 解析 @mentions
     mentioned_agents = parse_mentions(content)
     
-    # 确定作者信息
+    # 确定作者信息（添加验证）
     agents = get_active_agents()
     if author_type == 'chairman':
         author_id = HUMAN_USER['id']
         author_name = HUMAN_USER['name']
-    else:
+    elif author_type in agents:
         author_id = author_type
-        author_name = agents.get(author_type, {}).get('name', author_type)
+        author_name = agents[author_type]['name']
+    else:
+        # 检查是否是离职员工
+        all_agents = get_all_agents(include_dismissed=True)
+        if author_type in all_agents:
+            author_id = author_type
+            author_name = all_agents[author_type]['name']
+        else:
+            return jsonify({'error': f'无效的 author_type: {author_type}'}), 400
     
     reply_id = create_reply(
         post_id=post_id,
+        title=title,
         content=content,
         author_id=author_id,
         author_name=author_name,

@@ -152,6 +152,14 @@
             const previewContent = document.getElementById('preview-content');
             const submitBtn = document.getElementById('submit-btn');
 
+            // Initialize mention autocomplete
+            const agents = [
+                {% for agent_id, agent in agents.items() %}
+                { id: '{{ agent_id }}', name: '{{ agent.name }}', icon: '{{ agent.icon }}', color: '{{ agent.color }}' },
+                {% endfor %}
+            ];
+            window.App.createMentionAutocomplete(contentInput, agents);
+
             // 实时预览
             function updatePreview() {
                 const title = titleInput.value.trim();

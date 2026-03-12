@@ -81,6 +81,226 @@
         }
     };
 
+    // ==================== Mention Autocomplete ====================
+    const MentionAutocomplete = {
+        dropdown: null,
+        input: null,
+        agents: [],
+        selectedIndex: -1,
+        isActive: false,
+        mentionStart: -1,
+        mentionQuery: '',
+
+        init(inputElement, agents) {
+            this.input = inputElement;
+            this.agents = agents;
+            this.createDropdown();
+            this.bindEvents();
+        },
+
+        createDropdown() {
+            this.dropdown = document.createElement('div');
+            this.dropdown.className = 'mention-dropdown';
+            this.dropdown.innerHTML = '<div class="mention-dropdown-header">选择要提及的成员</div><div class="mention-dropdown-list"></div>';
+            document.body.appendChild(this.dropdown);
+        },
+
+        bindEvents() {
+            this.input.addEventListener('input', (e) => this.handleInput(e));
+            this.input.addEventListener('keydown', (e) => this.handleKeydown(e));
+            this.input.addEventListener('blur', () => setTimeout(() => this.hide(), 150));
+            this.dropdown.addEventListener('click', (e) => this.handleClick(e));
+        },
+
+        handleInput(e) {
+            const value = this.input.value;
+            const cursorPos = this.input.selectionStart;
+            
+            // Find @ symbol before cursor
+            let atPos = -1;
+            for (let i = cursorPos - 1; i >= 0; i--) {
+                if (value[i] === '@') {
+                    atPos = i;
+                    break;
+                }
+                if (value[i] === ' ' || value[i] === '\n') {
+                    break;
+                }
+            }
+            
+            if (atPos !== -1) {
+                this.mentionStart = atPos;
+                this.mentionQuery = value.substring(atPos + 1, cursorPos).toLowerCase();
+                this.show();
+            } else {
+                this.hide();
+            }
+        },
+
+        handleKeydown(e) {
+            if (!this.isActive) return;
+            
+            const items = this.dropdown.querySelectorAll('.mention-item');
+            
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    this.selectedIndex = Math.min(this.selectedIndex + 1, items.length - 1);
+                    this.updateSelection(items);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
+                    this.updateSelection(items);
+                    break;
+                case 'Enter':
+                case 'Tab':
+                    if (this.selectedIndex >= 0) {
+                        e.preventDefault();
+                        this.selectItem(items[this.selectedIndex]);
+                    }
+                    break;
+                case 'Escape':
+                    this.hide();
+                    break;
+            }
+        },
+
+        handleClick(e) {
+            const item = e.target.closest('.mention-item');
+            if (item) {
+                this.selectItem(item);
+            }
+        },
+
+        show() {
+            const filtered = this.getFilteredAgents();
+            if (filtered.length === 0) {
+                this.hide();
+                return;
+            }
+            
+            this.renderItems(filtered);
+            this.positionDropdown();
+            this.dropdown.classList.add('visible');
+            this.isActive = true;
+            this.selectedIndex = 0;
+            this.updateSelection(this.dropdown.querySelectorAll('.mention-item'));
+        },
+
+        hide() {
+            this.dropdown.classList.remove('visible');
+            this.isActive = false;
+            this.selectedIndex = -1;
+        },
+
+        getFilteredAgents() {
+            const results = [];
+            
+            // Add "all" option if query matches
+            if ('all'.startsWith(this.mentionQuery)) {
+                results.push({
+                    id: 'all',
+                    name: '所有人',
+                    icon: '👥',
+                    color: 'var(--primary-500)',
+                    isAll: true
+                });
+            }
+            
+            // Filter agents
+            for (const agent of this.agents) {
+                const matchId = agent.id.toLowerCase().includes(this.mentionQuery);
+                const matchName = agent.name.toLowerCase().includes(this.mentionQuery);
+                if (matchId || matchName) {
+                    results.push(agent);
+                }
+            }
+            
+            return results;
+        },
+
+        renderItems(items) {
+            const list = this.dropdown.querySelector('.mention-dropdown-list');
+            list.innerHTML = items.map((item, index) => `
+                <div class="mention-item ${item.isAll ? 'mention-item-all' : ''}" data-id="${item.id}" data-name="${item.name}">
+                    <div class="mention-item-icon" style="background: ${item.color}">${item.icon}</div>
+                    <div class="mention-item-info">
+                        <div class="mention-item-name">${item.name}</div>
+                        <div class="mention-item-id">@${item.id}</div>
+                    </div>
+                </div>
+            `).join('');
+        },
+
+        positionDropdown() {
+            const inputRect = this.input.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            
+            // Default position: below the input, aligned to left edge
+            let top = inputRect.bottom + scrollTop + 4;
+            let left = inputRect.left + scrollLeft;
+            
+            const dropdownHeight = 280;
+            const dropdownWidth = 280;
+            
+            // Check if dropdown would go below viewport
+            if (top + dropdownHeight > window.innerHeight + scrollTop) {
+                // Show above input instead
+                top = inputRect.top + scrollTop - dropdownHeight - 4;
+            }
+            
+            // Check if dropdown would go beyond right edge
+            if (left + dropdownWidth > window.innerWidth + scrollLeft) {
+                left = window.innerWidth + scrollLeft - dropdownWidth - 16;
+            }
+            
+            // Ensure minimum left position
+            left = Math.max(16, left);
+            
+            this.dropdown.style.top = `${top}px`;
+            this.dropdown.style.left = `${left}px`;
+        },
+
+        updateSelection(items) {
+            items.forEach((item, index) => {
+                item.classList.toggle('selected', index === this.selectedIndex);
+            });
+            
+            // Scroll selected item into view
+            if (this.selectedIndex >= 0 && items[this.selectedIndex]) {
+                items[this.selectedIndex].scrollIntoView({ block: 'nearest' });
+            }
+        },
+
+        selectItem(item) {
+            const id = item.dataset.id;
+            const value = this.input.value;
+            const beforeMention = value.substring(0, this.mentionStart);
+            const afterCursor = value.substring(this.input.selectionStart);
+            
+            // Insert mention
+            const newValue = beforeMention + '@' + id + ' ' + afterCursor;
+            this.input.value = newValue;
+            
+            // Set cursor position after the mention
+            const newCursorPos = beforeMention.length + id.length + 2;
+            this.input.setSelectionRange(newCursorPos, newCursorPos);
+            this.input.focus();
+            
+            this.hide();
+            
+            // Trigger input event for any listeners
+            this.input.dispatchEvent(new Event('input', { bubbles: true }));
+        },
+
+        // Update agents list dynamically
+        setAgents(agents) {
+            this.agents = agents;
+        }
+    };
+
     // ==================== 时间格式化 ====================
     const TimeFormatter = {
         init() {
@@ -274,7 +494,12 @@
         window.App = {
             showToast: (msg, type) => ToastManager.show(msg, type),
             confirm: (msg, onConfirm, onCancel) => ConfirmDialog.confirm(msg, onConfirm, onCancel),
-            setTheme: (theme) => ThemeManager.setTheme(theme)
+            setTheme: (theme) => ThemeManager.setTheme(theme),
+            createMentionAutocomplete: (input, agents) => {
+                const instance = Object.create(MentionAutocomplete);
+                instance.init(input, agents);
+                return instance;
+            }
         };
 
         console.log('🚀 Agent Forum 应用已加载');

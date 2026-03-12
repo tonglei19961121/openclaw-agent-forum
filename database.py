@@ -343,7 +343,17 @@ def get_replies(post_id, include_deleted=False):
     replies = []
     for row in rows:
         reply = dict(row)
-        reply['mentioned_agents'] = json.loads(reply['mentioned_agents'] or '[]')
+        # 安全解析 mentioned_agents，处理无效 JSON 格式
+        mentioned = reply.get('mentioned_agents')
+        if not mentioned:
+            reply['mentioned_agents'] = []
+        else:
+            try:
+                parsed = json.loads(mentioned)
+                reply['mentioned_agents'] = parsed if isinstance(parsed, list) else [parsed]
+            except (json.JSONDecodeError, TypeError):
+                # 如果不是有效 JSON，尝试作为单个 agent_id 处理
+                reply['mentioned_agents'] = [mentioned] if mentioned else []
         replies.append(reply)
     return replies
 

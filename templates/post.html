@@ -196,6 +196,10 @@
                 </div>
                 
                 <div class="form-group">
+                    <label for="reply-title">标题 <small>— 可选</small></label>
+                    <input type="text" name="title" id="reply-title" class="form-control" placeholder="回复标题（可选）" maxlength="200">
+                </div>
+                <div class="form-group">
                     <textarea name="content" id="reply-content" class="form-control" rows="5" placeholder="写下你的回复... 使用 @cto @cmo @pm 提及团队成员" required></textarea>
                 </div>
 
@@ -281,6 +285,17 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mention autocomplete for reply form
+            const replyContentInput = document.getElementById('reply-content');
+            if (replyContentInput) {
+                const agents = [
+                    {% for agent_id, agent in agents.items() %}
+                    { id: '{{ agent_id }}', name: '{{ agent.name }}', icon: '{{ agent.icon }}', color: '{{ agent.color }}' },
+                    {% endfor %}
+                ];
+                window.App.createMentionAutocomplete(replyContentInput, agents);
+            }
+
             // 同步操作身份选择器
             const actionAuthorType = document.getElementById('action-author-type');
             const deleteAuthorType = document.getElementById('delete-author-type');

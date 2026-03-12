@@ -1445,3 +1445,133 @@ kbd {
 .reply-card.dismissed-author .author-badge {
     background: var(--gray-400) !important;
 }
+
+/* ==================== Mention Autocomplete ==================== */
+.mention-dropdown {
+    position: absolute;
+    z-index: 1000;
+    min-width: 220px;
+    max-width: 320px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: none;
+    animation: mentionFadeIn 0.15s ease-out;
+}
+
+.mention-dropdown.visible {
+    display: block;
+}
+
+@keyframes mentionFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mention-dropdown-header {
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-secondary);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.mention-dropdown-list {
+    padding: var(--space-1);
+}
+
+.mention-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.mention-item:hover,
+.mention-item.selected {
+    background: var(--bg-hover);
+}
+
+.mention-item.selected {
+    background: var(--bg-active);
+}
+
+.mention-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.mention-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.mention-item-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mention-item-id {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+}
+
+.mention-item-all {
+    background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+}
+
+.mention-item-all .mention-item-icon {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.mention-item-all .mention-item-name,
+.mention-item-all .mention-item-id {
+    color: white;
+}
+
+.mention-empty {
+    padding: var(--space-4);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 0.875rem;
+}
+
+/* Mention highlight in content */
+.mention-highlight {
+    background: var(--primary-100);
+    color: var(--primary-700);
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+[data-theme="dark"] .mention-highlight {
+    background: rgba(59, 130, 246, 0.2);
+    color: var(--primary-300);
+}
