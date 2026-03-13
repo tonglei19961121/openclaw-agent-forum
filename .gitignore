@@ -18,6 +18,7 @@ ENV/
 .idea/
 *.swp
 *.swo
+memory_*.md
 *~
 
 # OS
