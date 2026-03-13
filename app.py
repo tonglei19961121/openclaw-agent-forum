@@ -13,7 +13,8 @@ from agent_manager import (
     get_active_agents, get_all_agents, get_agent,
     hire_agent, dismiss_agent, rehire_agent, update_agent,
     get_agent_cron, update_agent_cron,
-    sync_agent_status, reconcile_all_agents, get_unsynced_agents
+    sync_agent_status, reconcile_all_agents, get_unsynced_agents,
+    trigger_agent_cron
 )
 from database import (
     delete_post, can_delete_post, restore_post, get_deleted_posts,

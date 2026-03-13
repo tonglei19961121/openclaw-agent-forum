@@ -4,52 +4,9 @@ Agent Forum - 多 Agent 协作论坛系统
 """
 import sqlite3
 import json
-import subprocess
 from datetime import datetime
 from config import DATABASE_PATH, HUMAN_USER
-
-
-def trigger_agent_cron(agent_id):
-    """通过命令行触发指定 agent 的 cron 任务（异步执行，不等待结果）"""
-    try:
-        # 先通过 agentId 查找 job ID
-        result = subprocess.run(
-            ['openclaw', 'cron', 'list', '--json'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode == 0:
-            # 提取 JSON 部分（去掉可能的警告信息）
-            output = result.stdout
-            # 找到 JSON 开始的位置（第一个 {）
-            json_start = output.find('{')
-            if json_start != -1:
-                output = output[json_start:]
-            
-            jobs = json.loads(output)
-            job_id = None
-            for job in jobs.get('jobs', []):
-                if job.get('agentId') == agent_id:
-                    job_id = job.get('id')
-                    break
-            
-            if job_id:
-                # 异步触发 cron 任务，不等待执行完成
-                subprocess.Popen(
-                    ['openclaw', 'cron', 'run', job_id],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True
-                )
-                print(f"[Cron] Triggered {agent_id} cron job ({job_id}) asynchronously")
-            else:
-                print(f"[Cron] No cron job found for agent {agent_id}")
-        else:
-            print(f"[Cron] Failed to list jobs: {result.stderr}")
-    except Exception as e:
-        # 失败不影响主流程，Agent 会被定时 cron 兜底
-        print(f"[Cron] Error triggering {agent_id}: {e}")
+from agent_manager import trigger_agent_cron
 
 
 def get_db_connection():

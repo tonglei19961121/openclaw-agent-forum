@@ -252,11 +252,11 @@ def get_agent(agent_id):
         'dismissed_by': row['dismissed_by'],
         'soul_md': row['soul_md'],
         'agents_md': row['agents_md'],
-        'openclaw_agent_created': bool(row.get('openclaw_agent_created', 0)),
-        'openclaw_cron_id': row.get('openclaw_cron_id'),
-        'openclaw_sync_status': row.get('openclaw_sync_status', 'pending'),
-        'openclaw_sync_error': row.get('openclaw_sync_error'),
-        'openclaw_sync_at': row.get('openclaw_sync_at'),
+        'openclaw_agent_created': bool(row['openclaw_agent_created']) if 'openclaw_agent_created' in row.keys() else False,
+        'openclaw_cron_id': row['openclaw_cron_id'] if 'openclaw_cron_id' in row.keys() else None,
+        'openclaw_sync_status': row['openclaw_sync_status'] if 'openclaw_sync_status' in row.keys() else 'pending',
+        'openclaw_sync_error': row['openclaw_sync_error'] if 'openclaw_sync_error' in row.keys() else None,
+        'openclaw_sync_at': row['openclaw_sync_at'] if 'openclaw_sync_at' in row.keys() else None,
     }
 
 
@@ -502,9 +502,9 @@ def rehire_agent(agent_id, name=None, description=None, color=None,
         conn.close()
         return {'error': f'Agent "{agent_id}" is already active'}
 
-    # Build update fields
+    # Build update fields - reset openclaw sync state on rehire
     updates = ['status = ?', 'dismissed_at = NULL', 'dismissed_by = NULL', 'hired_at = CURRENT_TIMESTAMP',
-               'openclaw_sync_status = ?']
+               'openclaw_sync_status = ?', 'openclaw_agent_created = 0', 'openclaw_cron_id = NULL', 'openclaw_sync_error = NULL']
     params = ['active', 'pending']
 
     if name:
@@ -942,6 +942,54 @@ def update_agent_cron(agent_id, cron_expr=None, message=None):
         return {'error': 'openclaw CLI not found'}
     except Exception as e:
         return {'error': f'Cron edit error: {e}'}
+
+
+# ============== Cron Trigger ==============
+
+def trigger_agent_cron(agent_id):
+    """通过命令行触发指定 agent 的 cron 任务（异步执行，不等待结果）
+    
+    当帖子/回复中 @mention Agent 时，立即触发该 Agent 检查通知并响应。
+    """
+    try:
+        # 先通过 agentId 查找 job ID
+        result = subprocess.run(
+            ['openclaw', 'cron', 'list', '--json'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            # 提取 JSON 部分（去掉可能的警告信息）
+            output = result.stdout
+            # 找到 JSON 开始的位置（第一个 {）
+            json_start = output.find('{')
+            if json_start != -1:
+                output = output[json_start:]
+            
+            jobs = json.loads(output)
+            job_id = None
+            for job in jobs.get('jobs', []):
+                if job.get('agentId') == agent_id:
+                    job_id = job.get('id')
+                    break
+            
+            if job_id:
+                # 异步触发 cron 任务，不等待执行完成
+                subprocess.Popen(
+                    ['openclaw', 'cron', 'run', job_id],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+                print(f"[Cron] Triggered {agent_id} cron job ({job_id}) asynchronously")
+            else:
+                print(f"[Cron] No cron job found for agent {agent_id}")
+        else:
+            print(f"[Cron] Failed to list jobs: {result.stderr}")
+    except Exception as e:
+        # 失败不影响主流程，Agent 会被定时 cron 兜底
+        print(f"[Cron] Error triggering {agent_id}: {e}")
 
 
 # ============== Sync & Reconciliation ==============
