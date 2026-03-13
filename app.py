@@ -12,7 +12,8 @@ from config import HUMAN_USER, HOST, PORT, DEBUG, SECRET_KEY
 from agent_manager import (
     get_active_agents, get_all_agents, get_agent,
     hire_agent, dismiss_agent, rehire_agent, update_agent,
-    get_agent_cron, update_agent_cron
+    get_agent_cron, update_agent_cron,
+    sync_agent_status, reconcile_all_agents, get_unsynced_agents
 )
 from database import (
     delete_post, can_delete_post, restore_post, get_deleted_posts,
@@ -486,6 +487,78 @@ def api_notifications():
         'items': items
     })
 
+@app.route('/api/notifications', methods=['POST'])
+def api_create_notification():
+    """创建通知 API (Week 1)
+    
+    Request Body:
+    {
+        "recipient_id": "tech_lead",
+        "type": "mention|new_reply|task_assigned|system",
+        "title": "通知标题",
+        "content": "通知内容",
+        "post_id": 123,      // optional
+        "reply_id": 456      // optional
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "notification_id": 789
+    }
+    """
+    from database import get_valid_agent_ids
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Missing request body'}), 400
+    
+    recipient_id = data.get('recipient_id')
+    notif_type = data.get('type', 'system')
+    title = data.get('title', '')
+    content = data.get('content', '')
+    post_id = data.get('post_id')
+    reply_id = data.get('reply_id')
+    
+    # 验证必填字段
+    if not recipient_id:
+        return jsonify({'success': False, 'error': 'recipient_id is required'}), 400
+    
+    # 白名单校验
+    valid_agents = get_valid_agent_ids()
+    if recipient_id not in valid_agents:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid recipient_id. Valid agents: {valid_agents}'
+        }), 400
+    
+    # 类型校验
+    valid_types = ['mention', 'new_reply', 'task_assigned', 'system', 'cron_reminder']
+    if notif_type not in valid_types:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid type. Valid types: {valid_types}'
+        }), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO notifications (recipient_id, type, title, content, post_id, reply_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (recipient_id, notif_type, title, content, post_id, reply_id))
+    notification_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    # 触发 recipient 的 cron 任务
+    trigger_agent_cron(recipient_id)
+    
+    return jsonify({
+        'success': True,
+        'notification_id': notification_id
+    }), 201
+
+
 
 @app.route('/api/agents')
 def api_agents():
@@ -658,6 +731,56 @@ def api_update_agent_cron(agent_id):
         return jsonify(result), 400
     
     return jsonify(result)
+
+
+@app.route('/api/agents/<agent_id>/sync', methods=['POST'])
+def api_sync_agent(agent_id):
+    """Sync agent's OpenClaw resources with database status.
+    
+    Only chairman and ceo can trigger sync.
+    """
+    data = request.get_json() or {}
+    operator = data.get('operator', 'chairman')
+    
+    if operator not in ['chairman', 'ceo']:
+        return jsonify({'error': 'Only chairman or CEO can sync agents'}), 403
+    
+    result = sync_agent_status(agent_id)
+    
+    if 'error' in result:
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/agents/reconcile', methods=['POST'])
+def api_reconcile_agents():
+    """Reconcile all agents' OpenClaw resources with database status.
+    
+    This will:
+    - For active agents: ensure agent + cron exist in OpenClaw
+    - For dismissed agents: ensure agent + cron are removed from OpenClaw
+    
+    Only chairman and ceo can trigger reconciliation.
+    """
+    data = request.get_json() or {}
+    operator = data.get('operator', 'chairman')
+    
+    if operator not in ['chairman', 'ceo']:
+        return jsonify({'error': 'Only chairman or CEO can reconcile agents'}), 403
+    
+    result = reconcile_all_agents()
+    return jsonify(result)
+
+
+@app.route('/api/agents/unsynced')
+def api_get_unsynced_agents():
+    """Get agents with sync issues (openclaw_sync_status != 'synced')"""
+    agents = get_unsynced_agents()
+    return jsonify({
+        'agents': agents,
+        'total': len(agents)
+    })
 
 
 # ============== 健康检查 ==============

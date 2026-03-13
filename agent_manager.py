@@ -252,6 +252,11 @@ def get_agent(agent_id):
         'dismissed_by': row['dismissed_by'],
         'soul_md': row['soul_md'],
         'agents_md': row['agents_md'],
+        'openclaw_agent_created': bool(row.get('openclaw_agent_created', 0)),
+        'openclaw_cron_id': row.get('openclaw_cron_id'),
+        'openclaw_sync_status': row.get('openclaw_sync_status', 'pending'),
+        'openclaw_sync_error': row.get('openclaw_sync_error'),
+        'openclaw_sync_at': row.get('openclaw_sync_at'),
     }
 
 
@@ -937,3 +942,178 @@ def update_agent_cron(agent_id, cron_expr=None, message=None):
         return {'error': 'openclaw CLI not found'}
     except Exception as e:
         return {'error': f'Cron edit error: {e}'}
+
+
+# ============== Sync & Reconciliation ==============
+
+def _check_openclaw_agent_exists(agent_id):
+    """Check if an agent exists in OpenClaw.
+    
+    Returns: bool
+    """
+    try:
+        result = subprocess.run(
+            ['openclaw', 'agents', 'list', '--json'],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            try:
+                agents_list = json.loads(result.stdout)
+                for agent in agents_list:
+                    if agent.get('id', '').lower() == agent_id.lower():
+                        return True
+            except json.JSONDecodeError:
+                pass
+    except Exception:
+        pass
+    return False
+
+
+def sync_agent_status(agent_id):
+    """Check and fix sync status for a single agent.
+    
+    This function verifies that an agent's OpenClaw resources match its database status:
+    - Active agents should have: agent + cron in OpenClaw
+    - Dismissed agents should have: no agent + no cron in OpenClaw
+    
+    If mismatch found, attempts to fix it.
+    
+    Returns: dict with sync result
+    """
+    agent = get_agent(agent_id)
+    if not agent:
+        return {'error': f'Agent "{agent_id}" not found'}
+    
+    status = agent['status']
+    db_agent_created = agent.get('openclaw_agent_created', False)
+    db_cron_id = agent.get('openclaw_cron_id')
+    
+    # Check actual OpenClaw state
+    actual_agent_exists = _check_openclaw_agent_exists(agent_id)
+    actual_cron_info = get_agent_cron(agent_id)
+    actual_cron_id = actual_cron_info.get('job_id') if actual_cron_info else None
+    
+    errors = []
+    fixes = []
+    
+    if status == 'active':
+        # Active agent should have agent + cron
+        if not actual_agent_exists:
+            # Missing agent - try to create
+            print(f"[Sync] Agent {agent_id}: missing in OpenClaw, creating...")
+            result = _setup_openclaw_agent(agent_id, agent['name'], agent.get('soul_md'), agent.get('agents_md'))
+            if result['success']:
+                fixes.append('Created OpenClaw agent')
+            else:
+                errors.append(f"Failed to create agent: {result['error']}")
+        
+        if not actual_cron_id:
+            # Missing cron - try to create
+            print(f"[Sync] Agent {agent_id}: missing cron, creating...")
+            result = _setup_openclaw_cron(agent_id, agent['name'], agent.get('description', ''), agent.get('soul_md'))
+            if result['success']:
+                fixes.append('Created OpenClaw cron')
+                actual_cron_id = result.get('cron_id')
+            else:
+                errors.append(f"Failed to create cron: {result['error']}")
+        
+        # Update sync status
+        if not errors:
+            _update_agent_sync_status(agent_id, 'synced', agent_created=True, cron_id=actual_cron_id)
+        else:
+            _update_agent_sync_status(agent_id, 'error', agent_created=actual_agent_exists, 
+                                      cron_id=actual_cron_id, error='; '.join(errors))
+    
+    elif status == 'dismissed':
+        # Dismissed agent should NOT have agent + cron
+        if actual_agent_exists:
+            print(f"[Sync] Agent {agent_id}: unexpected agent in OpenClaw, removing...")
+            result = _remove_openclaw_agent(agent_id)
+            if result['success']:
+                fixes.append('Removed OpenClaw agent')
+            else:
+                errors.append(f"Failed to remove agent: {result['error']}")
+        
+        if actual_cron_id:
+            print(f"[Sync] Agent {agent_id}: unexpected cron in OpenClaw, removing...")
+            result = _remove_openclaw_cron(agent_id)
+            if result['success']:
+                fixes.append('Removed OpenClaw cron')
+            else:
+                errors.append(f"Failed to remove cron: {result['error']}")
+        
+        # Update sync status
+        if not errors:
+            _update_agent_sync_status(agent_id, 'synced', agent_created=False, cron_id=None)
+        else:
+            _update_agent_sync_status(agent_id, 'error', error='; '.join(errors))
+    
+    return {
+        'agent_id': agent_id,
+        'status': status,
+        'synced': len(errors) == 0,
+        'errors': errors if errors else None,
+        'fixes': fixes if fixes else None,
+        'state': {
+            'db_status': status,
+            'db_agent_created': db_agent_created,
+            'db_cron_id': db_cron_id,
+            'actual_agent_exists': actual_agent_exists,
+            'actual_cron_id': actual_cron_id,
+        }
+    }
+
+
+def reconcile_all_agents():
+    """Check and fix sync status for all agents.
+    
+    This is a bulk operation that:
+    1. Iterates through all agents in database
+    2. For each agent, verifies OpenClaw resources match database status
+    3. Attempts to fix any mismatches
+    
+    Returns: dict with summary of reconciliation
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM agents")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    results = {
+        'total_agents': len(rows),
+        'synced': 0,
+        'fixed': 0,
+        'errors': 0,
+        'details': []
+    }
+    
+    for row in rows:
+        agent_id = row['id']
+        sync_result = sync_agent_status(agent_id)
+        
+        if sync_result.get('synced'):
+            if sync_result.get('fixes'):
+                results['fixed'] += 1
+            else:
+                results['synced'] += 1
+        else:
+            results['errors'] += 1
+        
+        results['details'].append(sync_result)
+    
+    return results
+
+
+def get_unsynced_agents():
+    """Get agents with sync_status != 'synced'
+    
+    Returns: list of agent dicts
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM agents WHERE openclaw_sync_status != 'synced'")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [dict(row) for row in rows]

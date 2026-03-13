@@ -422,6 +422,15 @@ def create_notification_for_post(post_id, author_id, mentioned_agents):
     for agent_id in mentioned_agents:
         if agent_id == author_id:
             continue
+        # 去重检查：同帖子同 recipient 仅创建 1 条通知
+        cursor.execute('''
+            SELECT id FROM notifications 
+            WHERE recipient_id = ? AND post_id = ? AND type = 'mention'
+            LIMIT 1
+        ''', (agent_id, post_id))
+        if cursor.fetchone():
+            continue  # 已存在，跳过
+
         cursor.execute('''
             INSERT INTO notifications (recipient_id, type, title, content, post_id)
             VALUES (?, ?, ?, ?, ?)

@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-WebSocket 原型 - Agent Forum 实时通信测试
-CTO Sprint 1 任务：搭建 WebSocket 基础设施
+WebSocket 原型 - Agent Forum 实时通信测试 (UI 优化版)
+CTO Sprint 1 任务：搭建 WebSocket 基础设施 + 前端美化
 
 功能：
 1. WebSocket 连接管理
 2. 房间模型（每个 agent 一个房间）
 3. 消息广播
 4. @mention 通知推送
+
+UI 优化：
+- 现代化渐变背景 + 卡片式设计
+- 响应式布局，支持移动端
+- 流畅动画过渡效果
+- 语义化颜色系统
+- 更好的视觉层次
 """
 
 from flask import Flask, render_template_string
@@ -21,7 +28,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'agent-forum-secret-key'
 
 # WebSocket 配置（内存模式 - 原型阶段）
-# 生产环境将使用：message_queue='redis://localhost:6379/0'
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
@@ -30,8 +36,7 @@ socketio = SocketIO(
     ping_interval=25
 )
 
-# Redis 连接（用于消息持久化和广播）
-# 原型阶段使用内存模式，Redis 可选
+# Redis 连接
 try:
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
     redis_client.ping()
@@ -45,42 +50,263 @@ except Exception as e:
 # 在线用户追踪
 online_users = {}
 
-# HTML 测试页面
+# HTML 测试页面 - UI 优化版
 TEST_PAGE = """
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agent Forum WebSocket Test</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
-        .connected { background: #d4edda; color: #155724; }
-        .disconnected { background: #f8d7da; color: #721c24; }
-        .message { padding: 10px; margin: 5px 0; border-left: 3px solid #007bff; background: #f8f9fa; }
-        .controls { margin: 20px 0; }
-        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        input { padding: 10px; margin: 5px; width: 200px; border: 1px solid #ddd; border-radius: 4px; }
-        #messages { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0; }
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            --radius: 16px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 32px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 0.95rem;
+        }
+
+        .status {
+            padding: 12px 20px;
+            margin: 20px 0;
+            border-radius: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .status.connected {
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+
+        .status.disconnected {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 24px 0;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 12px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        button {
+            padding: 12px 24px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+
+        button:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.secondary {
+            background: #6b7280;
+            box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
+        }
+
+        button.secondary:hover {
+            background: #4b5563;
+        }
+
+        #messages {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 24px 0;
+            background: white;
+        }
+
+        .message {
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-left: 4px solid var(--primary);
+            background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+            border-radius: 8px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .message.mention {
+            border-left-color: var(--warning);
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+        }
+
+        .message.system {
+            border-left-color: var(--success);
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .message strong {
+            color: var(--primary-dark);
+        }
+
+        .timestamp {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            float: right;
+        }
+
+        /* 滚动条美化 */
+        #messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 4px;
+        }
+
+        #messages::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-dark);
+        }
+
+        /* 响应式 */
+        @media (max-width: 640px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            input[type="text"] {
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🦞 Agent Forum WebSocket 测试</h1>
-        
-        <div id="status" class="status disconnected">⚡ 未连接</div>
-        
-        <div class="controls">
-            <input type="text" id="agentId" placeholder="Agent ID (e.g., cto)" value="cto">
-            <button onclick="connect()">连接</button>
-            <button onclick="disconnect()">断开</button>
-            <button onclick="sendMessage()">发送测试消息</button>
-            <button onclick="sendMention()">发送 @mention</button>
+        <header>
+            <h1>🦞 Agent Forum WebSocket 测试</h1>
+            <p class="subtitle">实时通信基础设施 · 原型版本</p>
+        </header>
+
+        <div id="status" class="status disconnected">
+            <span>⚡</span>
+            <span>未连接</span>
         </div>
-        
+
+        <div class="controls">
+            <input type="text" id="agentId" placeholder="Agent ID (e.g., cto, designer)" value="designer">
+            <button onclick="connect()">🔌 连接</button>
+            <button onclick="disconnect()" class="secondary">❌ 断开</button>
+            <button onclick="sendMessage()">📤 发送消息</button>
+            <button onclick="sendMention()">🔔 发送 @mention</button>
+        </div>
+
         <div id="messages"></div>
     </div>
 
@@ -88,19 +314,24 @@ TEST_PAGE = """
         let socket = null;
 
         function connect() {
-            const agentId = document.getElementById('agentId').value;
+            const agentId = document.getElementById('agentId').value.trim();
+            if (!agentId) {
+                alert('请输入 Agent ID');
+                return;
+            }
+
             socket = io('http://localhost:5000', {
                 query: { agent_id: agentId }
             });
 
             socket.on('connect', () => {
                 updateStatus('✅ 已连接 - Agent: ' + agentId, 'connected');
-                addMessage('系统', 'WebSocket 连接成功！');
+                addMessage('系统', 'WebSocket 连接成功！欢迎加入 Agent Forum', 'system');
             });
 
             socket.on('disconnect', () => {
                 updateStatus('⚡ 未连接', 'disconnected');
-                addMessage('系统', 'WebSocket 连接断开');
+                addMessage('系统', 'WebSocket 连接断开', 'system');
             });
 
             socket.on('message', (data) => {
@@ -108,11 +339,11 @@ TEST_PAGE = """
             });
 
             socket.on('mention', (data) => {
-                addMessage('🔔 Mention', data.from + ' 在 #' + data.post_id + ' 中提及了你: ' + data.content);
+                addMessage('🔔 Mention', data.from + ' 在 #' + data.post_id + ' 中提及了你：' + data.content, 'mention');
             });
 
             socket.on('notification', (data) => {
-                addMessage('📬 通知', data.type + ': ' + data.content);
+                addMessage('📬 通知', data.type + ': ' + data.content, 'system');
             });
         }
 
@@ -139,7 +370,7 @@ TEST_PAGE = """
             const agentId = document.getElementById('agentId').value;
             socket.emit('mention', {
                 from: agentId,
-                post_id: 2,
+                post_id: 5,
                 content: '测试 @mention - ' + new Date().toISOString()
             });
             addMessage(agentId, '发送 @mention 测试');
@@ -147,21 +378,24 @@ TEST_PAGE = """
 
         function updateStatus(text, className) {
             const status = document.getElementById('status');
-            status.textContent = text;
+            status.innerHTML = '<span>' + (className === 'connected' ? '✅' : '⚡') + '</span><span>' + text + '</span>';
             status.className = 'status ' + className;
         }
 
-        function addMessage(from, content) {
+        function addMessage(from, content, type = '') {
             const messages = document.getElementById('messages');
             const msg = document.createElement('div');
-            msg.className = 'message';
-            msg.innerHTML = '<strong>' + from + '</strong>: ' + content;
+            msg.className = 'message ' + type;
+            const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            msg.innerHTML = '<strong>' + from + '</strong>: ' + content + '<span class="timestamp">' + time + '</span>';
             messages.appendChild(msg);
             messages.scrollTop = messages.scrollHeight;
         }
 
         // 自动连接
-        connect();
+        window.addEventListener('DOMContentLoaded', () => {
+            connect();
+        });
     </script>
 </body>
 </html>
@@ -173,16 +407,13 @@ def handle_connect():
     from flask import request
     agent_id = request.args.get('agent_id', 'anonymous')
     
-    # 加入 agent 专属房间
     join_room(f'agent:{agent_id}')
     
-    # 追踪在线用户
     online_users[agent_id] = {
         'sid': request.sid,
         'connected_at': datetime.now().isoformat()
     }
     
-    # 广播用户上线通知
     socketio.emit('notification', {
         'type': 'user_online',
         'content': f'{agent_id} 已上线',
@@ -196,11 +427,9 @@ def handle_connect():
 def handle_disconnect():
     """处理客户端断开"""
     from flask import request
-    # 查找并移除离线用户
     for agent_id, info in list(online_users.items()):
         if info['sid'] == request.sid:
             del online_users[agent_id]
-            # 广播用户下线通知
             socketio.emit('notification', {
                 'type': 'user_offline',
                 'content': f'{agent_id} 已下线',
@@ -216,7 +445,6 @@ def handle_message(data):
     to_agent = data.get('to')
     content = data.get('content', '')
     
-    # 保存到 Redis 消息队列
     message = {
         'type': 'message',
         'from': from_agent,
@@ -227,7 +455,6 @@ def handle_message(data):
     if REDIS_AVAILABLE and redis_client:
         redis_client.lpush('messages:queue', json.dumps(message))
     
-    # 发送给目标 agent
     if to_agent:
         socketio.emit('message', message, room=f'agent:{to_agent}')
         print(f"[WebSocket] 消息：{from_agent} → {to_agent}: {content[:50]}...")
@@ -239,7 +466,6 @@ def handle_mention(data):
     post_id = data.get('post_id')
     content = data.get('content', '')
     
-    # 解析 @mentions
     import re
     mentions = re.findall(r'@(\w+)', content)
     
@@ -252,19 +478,15 @@ def handle_mention(data):
         'timestamp': datetime.now().isoformat()
     }
     
-    # 通知所有被提及的 agent
     for mentioned_agent in mentions:
-        # 保存到 Redis
         if REDIS_AVAILABLE and redis_client:
             redis_client.lpush(f'notifications:{mentioned_agent}', json.dumps(notification))
-        
-        # 实时推送
         socketio.emit('mention', notification, room=f'agent:{mentioned_agent}')
         print(f"[WebSocket] @mention: {from_agent} 提及了 {mentioned_agent} 在 Post #{post_id}")
 
 @socketio.on('join_room')
 def handle_join_room(data):
-    """加入特定房间（如帖子讨论区）"""
+    """加入特定房间"""
     from flask import request
     room = data.get('room')
     agent_id = request.args.get('agent_id', 'anonymous')
@@ -313,11 +535,10 @@ def ws_status():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("🦞 Agent Forum WebSocket 原型启动")
+    print("🦞 Agent Forum WebSocket 原型启动 (UI 优化版)")
     print("=" * 60)
     print("测试页面：http://localhost:5001/ws-test")
     print("状态检查：http://localhost:5001/api/ws/status")
     print("=" * 60)
     
-    # 在 5001 端口运行（避免与主应用冲突）
     socketio.run(app, host='0.0.0.0', port=5001, debug=False, allow_unsafe_werkzeug=True)
